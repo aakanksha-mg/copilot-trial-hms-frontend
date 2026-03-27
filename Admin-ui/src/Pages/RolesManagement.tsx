@@ -17,6 +17,17 @@ import FieldTreeView from '../components/ui/FieldTreeView'
 import { showToast } from "@/components/ui/sonner"
 import { NOTIFICATION_CONSTANTS } from '@/utils/constant'
 import Loading from '@/components/ui/Loading'
+import DynamicFormBuilder from '@/components/form/DynamicFormBuilder'
+import { TAB_SECTION_MAP } from '@/services/uiAccessService'
+
+// Reverse map: display name (from API) → tab value key
+const TAB_DISPLAY_TO_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(TAB_SECTION_MAP).map(([k, v]) => [v, k])
+)
+
+// Normalize a display name to a snake_case key (e.g. "Individual Agent Action" → "individual_agent_action")
+const normalizeKey = (s: string) =>
+  s.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
 
 const RolesManagement = () => {
   type Role = {
@@ -84,6 +95,10 @@ const RolesManagement = () => {
   const [treeData, setTreeData] = useState<any[]>([])
   const [globalLoading, setGlobalLoading] = useState(false)
   const searchDebounceRef = useRef<number | null>(null)
+  // State for the "Add Field" dialog
+  const [openAddField, setOpenAddField] = useState(false)
+  const [addingField, setAddingField] = useState(false)
+  const [selectedSectionForField, setSelectedSectionForField] = useState<any | null>(null)
   const selectedSet = useMemo(
     () => new Set(selectedUsernames.map(u => u.toLowerCase())),
     [selectedUsernames]
@@ -290,6 +305,11 @@ const RolesManagement = () => {
 
                     // store full fieldList for later use
                     fieldList: section.fieldList || [],
+
+                    // metadata for "Add Field" feature
+                    screenName: screen.section,
+                    tabKey: TAB_DISPLAY_TO_KEY[tab.section] || normalizeKey(tab.section),
+                    sectionKey: normalizeKey(section.section),
 
                     // do NOT show fields in tree
                     children: [],
@@ -945,9 +965,51 @@ const RolesManagement = () => {
     return
 
   }
+  const handleAddField = async (formData: Record<string, any>) => {
+    if (!selectedSectionForField) return
+
+    setAddingField(true)
+    try {
+      const payload = {
+        key: formData.key,
+        label: formData.label,
+        type: formData.type,
+        placeholder: formData.placeholder || null,
+        required: false,
+        minLength: null,
+        maxLength: null,
+        pattern: null,
+        validationMessage: null,
+        options: formData.options || null,
+        targetScreen: selectedSectionForField.screenName,
+        targetTab: selectedSectionForField.tabKey,
+        targetSection: selectedSectionForField.sectionKey,
+        sortOrder: Number(formData.sortOrder) || 100,
+        isActive: true,
+      }
+
+      const res: any = await HMSService.saveCustomField(payload)
+      handleApiToast(res)
+
+      if (res?.responseHeader?.errorCode === 1101) {
+        setOpenAddField(false)
+      }
+    } catch (error: any) {
+      showToast(
+        NOTIFICATION_CONSTANTS.ERROR,
+        error?.response?.data?.responseHeader?.errorMessage ||
+          error?.message ||
+          'Failed to save field'
+      )
+    } finally {
+      setAddingField(false)
+    }
+  }
+
   const handleRoleClick = (role: Role) => {
     setSelectedRole(role)
     setFieldAccess([])
+    setSelectedSectionForField(null)
     if (activeTab === 'menu') {
       displayMenu(role)
     } else if (activeTab === 'user') {
@@ -1143,6 +1205,105 @@ const RolesManagement = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ADD FIELD DIALOG */}
+      <AlertDialog open={openAddField} onOpenChange={setOpenAddField}>
+        <AlertDialogContent className="sm:max-w-lg rounded-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-semibold text-gray-800">
+              Add Custom Field
+            </AlertDialogTitle>
+            {selectedSectionForField && (
+              <p className="text-sm text-gray-500 mt-1">
+                Screen: <strong>{selectedSectionForField.screenName}</strong> &nbsp;|&nbsp;
+                Section: <strong>{selectedSectionForField.name}</strong>
+              </p>
+            )}
+          </AlertDialogHeader>
+
+          <div className="mt-4">
+            <DynamicFormBuilder
+              config={{
+                gridCols: 2,
+                fields: [
+                  {
+                    name: 'key',
+                    label: 'Field Key',
+                    type: 'text',
+                    placeholder: 'e.g. custom_field_1',
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'label',
+                    label: 'Field Label',
+                    type: 'text',
+                    placeholder: 'e.g. My Custom Field',
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'type',
+                    label: 'Field Type',
+                    type: 'select',
+                    colSpan: 1,
+                    options: [
+                      { value: 'text', label: 'Text' },
+                      { value: 'number', label: 'Number' },
+                      { value: 'email', label: 'Email' },
+                      { value: 'date', label: 'Date' },
+                      { value: 'select', label: 'Select / Dropdown' },
+                      { value: 'checkbox', label: 'Checkbox' },
+                      { value: 'boolean', label: 'Toggle / Switch' },
+                      { value: 'textarea', label: 'Text Area' },
+                    ],
+                  },
+                  {
+                    name: 'placeholder',
+                    label: 'Placeholder',
+                    type: 'text',
+                    placeholder: 'Placeholder text…',
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'sortOrder',
+                    label: 'Sort Order',
+                    type: 'number',
+                    placeholder: '100',
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'options',
+                    label: 'Options (JSON – for select / checkbox)',
+                    type: 'textarea',
+                    placeholder: '[{"value":"opt1","label":"Option 1"}]',
+                    colSpan: 2,
+                  },
+                ],
+                defaultValues: { sortOrder: 100 },
+                buttons: {
+                  gridCols: 2,
+                  items: [
+                    {
+                      label: addingField ? 'Saving…' : 'Save Field',
+                      type: 'submit',
+                      variant: 'blue',
+                      colSpan: 1,
+                    },
+                  ],
+                },
+              }}
+              onSubmit={handleAddField}
+            />
+          </div>
+
+          <AlertDialogFooter className="mt-2 flex justify-end gap-3">
+            <AlertDialogCancel
+              className="rounded-md border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex gap-6">
         {/* LEFT SIDE - ROLES */}
         <div className="bg-white rounded-2xl shadow-md border p-6 w-85">
@@ -1311,6 +1472,7 @@ const RolesManagement = () => {
                                 }))
 
                                 setFieldAccess(formattedFields)
+                                setSelectedSectionForField(node)
                               }
                             }}
                           />
@@ -1319,6 +1481,18 @@ const RolesManagement = () => {
 
                         {/* RIGHT → TABLE (BIGGER) */}
                         <div className="col-span-8 bg-white border rounded-lg p-4 h-full overflow-auto">
+                          {/* Add Field button – visible when a section is selected */}
+                          <div className="flex justify-end mb-3">
+                            <button
+                              onClick={() => setOpenAddField(true)}
+                              disabled={!selectedSectionForField}
+                              className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded-xl text-sm font-medium hover:bg-green-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={selectedSectionForField ? `Add field to "${selectedSectionForField.name}"` : 'Select a section first'}
+                            >
+                              <Plus size={16} />
+                              Add Field
+                            </button>
+                          </div>
                           <div className="overflow-auto">
                             <table className="w-full border border-gray-300 text-sm">
                               {/* HEADER */}

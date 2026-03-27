@@ -65,6 +65,8 @@ const APIRoutes = {
   FETCHBRANCHBYUSER: "/api/Users/RegulatorUserBranch/FetchByUser",
   SAVEPRODUCT: "/api/AppMasters/SaveProduct",
   GETPRODUCTS: "/api/AppMasters/GetProducts",
+  SAVECUSTOMFIELD: "/api/CustomFields/Save",
+  GETCUSTOMFIELDS: "/api/CustomFields/Fetch",
 
 };
 

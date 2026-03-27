@@ -457,6 +457,35 @@ export const HMSService = {
     return callApi("getRefreshToken", [{refreshToken: JSON.parse(auth.getToken())?.refreshToken}])
   },
 
+  saveCustomField: async (payload: {
+    key: string
+    label: string
+    type: string
+    placeholder?: string | null
+    required?: boolean
+    minLength?: number | null
+    maxLength?: number | null
+    pattern?: string | null
+    validationMessage?: string | null
+    options?: string | null
+    targetScreen: string
+    targetTab: string
+    targetSection: string
+    sortOrder?: number
+    isActive?: boolean
+  }) => {
+    return callApi(APIRoutes.SAVE_CUSTOM_FIELD, [payload])
+  },
+
+  getCustomFields: async (payload: {
+    targetScreen?: string
+    targetTab?: string
+    targetSection?: string
+    isActive?: boolean
+  }) => {
+    return callApi(APIRoutes.GET_CUSTOM_FIELDS, [payload])
+  },
+
   createIndividualAgent: async (payload: {
     agentName: string
     firstName: string

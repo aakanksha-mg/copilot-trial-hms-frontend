@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BiUser } from 'react-icons/bi'
 import { Card, CardContent } from '../ui/card'
 import DynamicFormBuilder from '../form/DynamicFormBuilder'
@@ -12,6 +12,7 @@ import { useMasterData } from '@/hooks/useMasterData'
 import { agentService } from '@/services/agentService'
 import { showToast } from '@/components/ui/sonner'
 import { useUIAccess } from '@/hooks/uiAccess'
+import { HMSService } from '@/services/hmsService'
 
 const formatDateToISO = (dateString: string) => {
   if (!dateString) return null;
@@ -79,6 +80,52 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
   // Get UI access permissions for agent section
   // API expects "Agent" (capitalized) and "Screen" (capitalized)
   const { isFieldVisible, isFieldEditable, isLoading: uiAccessLoading, isSectionVisible } = useUIAccess('Agent', 'Screen')
+
+  // Custom fields fetched from backend (created by admin via RolesManagement > Field tab)
+  const [customFields, setCustomFields] = useState<any[]>([])
+  const [customFieldsKey, setCustomFieldsKey] = useState(0)
+
+  useEffect(() => {
+    HMSService.getCustomFields({ targetScreen: 'Agent', targetTab: activeTab, isActive: true })
+      .then((res: any) => {
+        const fields: any[] = res?.responseBody?.customFields || []
+        setCustomFields(fields)
+        if (fields.length > 0) {
+          setCustomFieldsKey(k => k + 1)
+        }
+      })
+      .catch((err: any) => {
+        console.error('Failed to fetch custom fields:', err)
+      })
+  }, [activeTab])
+
+  // Returns DynamicFormBuilder-compatible field configs for a given section
+  const getCustomFieldsForSection = (sectionName: string) => {
+    return customFields
+      .filter(f => f.targetSection === sectionName && f.isActive !== false)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map(f => ({
+        name: f.key,
+        label: f.label,
+        type: f.type,
+        placeholder: f.placeholder || '',
+        colSpan: 4,
+        readOnly: !isEdit,
+        variant: 'standard' as const,
+        ...(f.options
+          ? {
+              options: (() => {
+                try {
+                  return JSON.parse(f.options)
+                } catch (e) {
+                  console.warn(`Custom field "${f.key}" has invalid options JSON:`, e)
+                  return []
+                }
+              })(),
+            }
+          : {}),
+      }))
+  }
 
   if (!agent) return null
 
@@ -342,6 +389,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         variant: 'custom',
         options: getOptions(MASTER_DATA_KEYS.DESIGNATION),
       },
+      ...getCustomFieldsForSection('individual_agent_action'),
     ]),
 
     buttons: isEdit
@@ -483,6 +531,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         readOnly: !isEdit,
         variant: 'standard',
       },
+      ...getCustomFieldsForSection('personal_details'),
     ]),
 
     buttons: isEdit
@@ -598,6 +647,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         readOnly: !isEdit,
         variant: 'standard',
       },
+      ...getCustomFieldsForSection('contact_information'),
     ]),
 
     buttons: isEdit
@@ -766,6 +816,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
       //   colSpan: 12,
       //   variant:"white",
       // },
+      ...getCustomFieldsForSection('employee_info'),
     ]),
     // BUTTONS
 
@@ -956,6 +1007,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         variant: 'standard',
         options: getOptions(MASTER_DATA_KEYS.PAYMENT_MODE),
       },
+      ...getCustomFieldsForSection('financial_details'),
     ]),
 
     // BUTTONS
@@ -1142,6 +1194,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         readOnly: !isEdit,
         variant: 'standard',
       },
+      ...getCustomFieldsForSection('other_personal_details'),
     ]),
     buttons: isEdit
       ? {
@@ -1265,6 +1318,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
         readOnly: !isEdit,
         variant: 'standard',
       },
+      ...getCustomFieldsForSection('address_info'),
     ]),
 
     buttons: isEdit
@@ -1365,6 +1419,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
             <Card className="flex justify-center items-center bg-white w-full  !m-0  p-4 w-[100%] !rounded-sm overflow-y-auto bg-[#F2F2F7] w-[100%]">
               <CardContent className="w-[100%] p-0">
                 <DynamicFormBuilder
+                  key={`individual_agent_action-${customFieldsKey}`}
                   config={agentChannelConfig}
                   onSubmit={handleSectionSubmit(agentChannelConfig.sectionName)}
                   onFieldClick={handleFieldClick}
@@ -1390,6 +1445,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent className="!px-0 !py-0 w-[100%]">
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`personal_details-${customFieldsKey}`}
                       config={PersonalDetailsConfig}
                       onSubmit={handleSectionSubmit(
                         PersonalDetailsConfig.sectionName,
@@ -1414,6 +1470,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent>
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`contact_information-${customFieldsKey}`}
                       config={contactInformationConfig}
                       onSubmit={handleSectionSubmit(
                         contactInformationConfig.sectionName,
@@ -1456,6 +1513,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent>
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`employee_info-${customFieldsKey}`}
                       config={employeeInformationConfig}
                       onSubmit={handleSectionSubmit(
                         employeeInformationConfig.sectionName,
@@ -1478,6 +1536,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent>
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`financial_details-${customFieldsKey}`}
                       config={financialDetailsConfig}
                       onSubmit={handleSectionSubmit(
                         financialDetailsConfig.sectionName,
@@ -1500,6 +1559,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent>
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`other_personal_details-${customFieldsKey}`}
                       config={otherPersonalDetailsConfig}
                       onSubmit={handleSectionSubmit(
                         otherPersonalDetailsConfig.sectionName,
@@ -1523,6 +1583,7 @@ const AgentDetail = ({ agent, getOptions, activeTab }: AgentDetailProps) => {
                 <CardContent>
                   <AutoAccordionSection id="sec-1">
                     <DynamicFormBuilder
+                      key={`address_info-${customFieldsKey}`}
                       config={addressConfig}
                       onSubmit={handleSectionSubmit(addressConfig.sectionName)}
                     />

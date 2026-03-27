@@ -60,6 +60,8 @@ export const APIRoutes = {
   CREATE_INDIVIDUAL_AGENT: 'CreateIndividualAgent',
   SAVE_PRODUCT: 'SaveProduct',
   GET_PRODUCTS: 'GetProducts',
+  SAVE_CUSTOM_FIELD: 'saveCustomField',
+  GET_CUSTOM_FIELDS: 'getCustomFields',
 }
 
 export const LoginConstants = {
