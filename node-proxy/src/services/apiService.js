@@ -575,6 +575,14 @@ const fetchBranchByUser = (data = {}, headers = {}) => {
 
 
 
+const saveCustomField = async (data = {}, headers = {}) => {
+  return apiClient.post(APIRoutes.SAVECUSTOMFIELD, data, { headers });
+};
+
+const getCustomFields = async (data = {}, headers = {}) => {
+  return apiClient.post(APIRoutes.GETCUSTOMFIELDS, data, { headers });
+};
+
 module.exports = {
   login,
   search,
@@ -653,4 +661,6 @@ module.exports = {
   CreateIndividualAgent,
   saveBranchLinkedUser,
   fetchBranchByUser,
+  saveCustomField,
+  getCustomFields,
 };
