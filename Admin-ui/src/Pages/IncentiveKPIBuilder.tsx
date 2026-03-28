@@ -45,17 +45,30 @@ interface TimeWindow {
   rollingDays?: number
 }
 
-interface KPIConfig {
+/** A single data-source component within a KPI (one object + aggregation + field + filters). */
+interface KPIDataSource {
+  id: string
   object: ObjectType | ''
   aggregation: AggregationType | ''
   field: string
-  group_by: GroupByType[]
-  filters: Array<{
+  filters: FilterCondition[]
+}
+
+/** Full KPI configuration — now supports multiple independent data sources. */
+interface KPIConfig {
+  dataSources: Array<{
+    id: string
+    object: ObjectType | ''
+    aggregation: AggregationType | ''
     field: string
-    operator: string
-    value: string | string[]
-    logical_operator?: string
+    filters: Array<{
+      field: string
+      operator: string
+      value: string | string[]
+      logical_operator?: string
+    }>
   }>
+  group_by: GroupByType[]
   time_window: TimeWindow
 }
 
@@ -153,128 +166,139 @@ function SectionBadge({ letter }: { letter: string }) {
   )
 }
 
+// ─── Helper: create a blank data source ──────────────────────────────────────
+
+function newDataSource(): KPIDataSource {
+  return {
+    id: crypto.randomUUID(),
+    object: '',
+    aggregation: '',
+    field: '',
+    filters: [],
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const IncentiveKPIBuilder = () => {
   const [kpiName, setKpiName] = useState('')
-  const [selectedObject, setSelectedObject] = useState<ObjectType | ''>('')
-  const [selectedAggregation, setSelectedAggregation] = useState<AggregationType | ''>('')
-  const [selectedField, setSelectedField] = useState('')
+  // Multiple data sources — each KPI can aggregate over one or more objects
+  const [dataSources, setDataSources] = useState<KPIDataSource[]>([newDataSource()])
   const [groupBy, setGroupBy] = useState<GroupByType[]>(['sales_personnel_id'])
-  const [filters, setFilters] = useState<FilterCondition[]>([])
   const [timeWindow, setTimeWindow] = useState<TimeWindow>({ type: 'PROGRAM_DURATION' })
   const [showPreview, setShowPreview] = useState(false)
   const [showJSON, setShowJSON] = useState(false)
   const [testPersonnelId, setTestPersonnelId] = useState('')
 
-  // Fields available for the selected object (all, used in filter dropdowns)
-  const allObjectFields = useMemo<FieldMetadata[]>(() => {
-    if (!selectedObject) return []
-    return OBJECT_FIELDS[selectedObject as ObjectType] ?? []
-  }, [selectedObject])
-
-  // Fields filtered to those compatible with the chosen aggregation (Section C)
-  const aggregationCompatibleFields = useMemo<FieldMetadata[]>(() => {
-    if (!selectedObject || !selectedAggregation) return []
-    const allowed = AGGREGATION_FIELD_TYPES[selectedAggregation as AggregationType] ?? []
-    return allObjectFields.filter((f) => allowed.includes(f.type))
-  }, [selectedObject, selectedAggregation, allObjectFields])
-
-  // Derived KPI config JSON
+  // Derived KPI config JSON (multi-source)
   const kpiConfig: KPIConfig = useMemo(
     () => ({
-      object: selectedObject,
-      aggregation: selectedAggregation,
-      field: selectedField,
-      group_by: groupBy,
-      filters: filters.map((f, idx) => ({
-        field: f.field,
-        operator: f.operator,
-        value:
-          f.operator === 'IN' || f.operator === 'NOT_IN'
-            ? f.value.split(',').map((v) => v.trim())
-            : f.value,
-        ...(idx > 0 && { logical_operator: f.logicalOperator }),
+      dataSources: dataSources.map((ds) => ({
+        id: ds.id,
+        object: ds.object,
+        aggregation: ds.aggregation,
+        field: ds.field,
+        filters: ds.filters.map((f, idx) => ({
+          field: f.field,
+          operator: f.operator,
+          value:
+            f.operator === 'IN' || f.operator === 'NOT_IN'
+              ? f.value.split(',').map((v) => v.trim())
+              : f.value,
+          ...(idx > 0 && { logical_operator: f.logicalOperator }),
+        })),
       })),
+      group_by: groupBy,
       time_window: timeWindow,
     }),
-    [selectedObject, selectedAggregation, selectedField, groupBy, filters, timeWindow],
+    [dataSources, groupBy, timeWindow],
   )
 
-  // Human-readable formula breakdown
-  const formulaText = useMemo(() => {
-    if (!selectedAggregation || !selectedField || !selectedObject) return null
-    const fieldLabel =
-      allObjectFields.find((f) => f.key === selectedField)?.label ?? selectedField
-    const aggLabel =
-      AGGREGATION_LABELS[selectedAggregation as AggregationType] ?? selectedAggregation
-    const filterLines = filters
-      .map((f, idx) => {
-        const fl = allObjectFields.find((x) => x.key === f.field)?.label ?? f.field
-        const valPart =
-          f.operator === 'IN' || f.operator === 'NOT_IN'
-            ? `${f.operator} (${f.value})`
-            : `${f.operator} ${f.value}`
-        return `${idx > 0 ? f.logicalOperator + ' ' : ''}${fl} ${valPart}`
+  // Human-readable formula breakdown (one line per data source)
+  const formulaLines = useMemo(() => {
+    return dataSources
+      .filter((ds) => ds.object && ds.aggregation && ds.field)
+      .map((ds) => {
+        const fields = OBJECT_FIELDS[ds.object as ObjectType] ?? []
+        const fieldLabel = fields.find((f) => f.key === ds.field)?.label ?? ds.field
+        const aggLabel = AGGREGATION_LABELS[ds.aggregation as AggregationType] ?? ds.aggregation
+        const filterLines = ds.filters
+          .map((f, idx) => {
+            const fl = fields.find((x) => x.key === f.field)?.label ?? f.field
+            const valPart =
+              f.operator === 'IN' || f.operator === 'NOT_IN'
+                ? `${f.operator} (${f.value})`
+                : `${f.operator} ${f.value}`
+            return `${idx > 0 ? f.logicalOperator + ' ' : ''}${fl} ${valPart}`
+          })
+          .join('\n')
+        return {
+          main: `${aggLabel}(${fieldLabel})`,
+          object: `FROM ${OBJECT_LABELS[ds.object as ObjectType] ?? ds.object}`,
+          where: filterLines || null,
+        }
       })
-      .join('\n')
-    return {
-      main: `${aggLabel}(${fieldLabel})`,
-      object: `FROM ${OBJECT_LABELS[selectedObject as ObjectType] ?? selectedObject}`,
-      where: filterLines || null,
-      groupBy: `GROUP BY ${groupBy.join(', ')}`,
-    }
-  }, [selectedAggregation, selectedField, selectedObject, filters, groupBy, allObjectFields])
+  }, [dataSources])
 
-  const isConfigValid = Boolean(selectedObject && selectedAggregation && selectedField)
+  const isConfigValid = dataSources.some(
+    (ds) => ds.object && ds.aggregation && ds.field,
+  )
 
-  // ── Filter helpers ──────────────────────────────────────────────────────────
+  // ── Data source helpers ─────────────────────────────────────────────────────
 
-  const addFilter = () => {
-    setFilters((prev) => [
-      ...prev,
-      {
-        id: `filter-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        field: '',
-        operator: '=',
-        value: '',
-        logicalOperator: 'AND',
-      },
-    ])
+  const addDataSource = () => setDataSources((prev) => [...prev, newDataSource()])
+
+  const removeDataSource = (id: string) =>
+    setDataSources((prev) => (prev.length > 1 ? prev.filter((ds) => ds.id !== id) : prev))
+
+  const updateDataSource = (id: string, updates: Partial<KPIDataSource>) =>
+    setDataSources((prev) => prev.map((ds) => (ds.id === id ? { ...ds, ...updates } : ds)))
+
+  // ── Filter helpers (scoped to a data source) ────────────────────────────────
+
+  const addFilter = (dsId: string) => {
+    updateDataSource(dsId, {
+      filters: [
+        ...(dataSources.find((ds) => ds.id === dsId)?.filters ?? []),
+        {
+          id: crypto.randomUUID(),
+          field: '',
+          operator: '=',
+          value: '',
+          logicalOperator: 'AND',
+        },
+      ],
+    })
   }
 
-  const removeFilter = (id: string) => setFilters((prev) => prev.filter((f) => f.id !== id))
+  const removeFilter = (dsId: string, filterId: string) => {
+    const ds = dataSources.find((d) => d.id === dsId)
+    if (!ds) return
+    updateDataSource(dsId, { filters: ds.filters.filter((f) => f.id !== filterId) })
+  }
 
-  const updateFilter = (id: string, updates: Partial<FilterCondition>) =>
-    setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)))
+  const updateFilter = (dsId: string, filterId: string, updates: Partial<FilterCondition>) => {
+    const ds = dataSources.find((d) => d.id === dsId)
+    if (!ds) return
+    updateDataSource(dsId, {
+      filters: ds.filters.map((f) => (f.id === filterId ? { ...f, ...updates } : f)),
+    })
+  }
 
   // ── Grouping helpers ────────────────────────────────────────────────────────
 
   const toggleGroupBy = (value: GroupByType) => {
-    // sales_personnel_id is mandatory and cannot be toggled
     if (value === 'sales_personnel_id') return
     setGroupBy((prev) =>
       prev.includes(value) ? prev.filter((g) => g !== value) : [...prev, value],
     )
   }
 
-  // ── Object / Aggregation change resets ────────────────────────────────────
-
-  const handleObjectChange = (value: string) => {
-    setSelectedObject(value as ObjectType)
-    setSelectedField('')
-    setFilters([])
-  }
-
-  const handleAggregationChange = (value: string) => {
-    setSelectedAggregation(value as AggregationType)
-    setSelectedField('')
-  }
-
   // ── Simulated KPI value for sample testing ──────────────────────────────────
 
+  const firstAgg = dataSources.find((ds) => ds.aggregation)?.aggregation
   const simulatedValue =
-    selectedAggregation === 'SUM' || selectedAggregation === 'AVG' ? '₹3,42,000' : '47'
+    firstAgg === 'SUM' || firstAgg === 'AVG' ? '₹3,42,000' : '47'
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -329,138 +353,302 @@ const IncentiveKPIBuilder = () => {
               </CardContent>
             </Card>
 
-            {/* Section A – Data Source */}
+            {/* ── Data Sources (multi-object) ── */}
             <Card className="rounded-lg border border-neutral-200">
               <CardHeader className="px-4 pb-2 pt-4">
-                <div className="flex items-center gap-2">
-                  <SectionBadge letter="A" />
-                  <CardTitle className="text-base">Select Data Source</CardTitle>
-                </div>
-                <p className="text-xs text-neutral-500">
-                  Choose the object type to aggregate data from
-                </p>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <Select value={selectedObject} onValueChange={handleObjectChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select object…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="policy">Policy</SelectItem>
-                    <SelectItem value="training">Training</SelectItem>
-                    <SelectItem value="sales_activity">Sales Activity</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {selectedObject && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {OBJECT_FIELDS[selectedObject as ObjectType].map((f) => (
-                      <Badge
-                        key={f.key}
-                        variant="outline"
-                        className="text-xs text-neutral-600"
-                      >
-                        {f.label}
-                        <span className="ml-1 text-neutral-400">({f.type})</span>
-                      </Badge>
-                    ))}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <SectionBadge letter="A" />
+                    <CardTitle className="text-base">Data Sources</CardTitle>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Section B – Aggregation */}
-            <Card className="rounded-lg border border-neutral-200">
-              <CardHeader className="px-4 pb-2 pt-4">
-                <div className="flex items-center gap-2">
-                  <SectionBadge letter="B" />
-                  <CardTitle className="text-base">Select Aggregation</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={addDataSource}
+                    icon={<FiPlus className="h-3 w-3" />}
+                  >
+                    Add Data Source
+                  </Button>
                 </div>
                 <p className="text-xs text-neutral-500">
-                  Choose how to aggregate the selected field
+                  Add one or more object types to aggregate data from. Each data source contributes
+                  an independent metric to the KPI.
                 </p>
               </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(['SUM', 'COUNT', 'DISTINCT_COUNT', 'AVG'] as AggregationType[]).map(
-                    (agg) => (
-                      <button
-                        key={agg}
-                        type="button"
-                        onClick={() => handleAggregationChange(agg)}
-                        className={`rounded-lg border p-3 text-center transition ${
-                          selectedAggregation === agg
-                            ? 'border-teal-500 bg-teal-50 text-teal-700'
-                            : 'border-neutral-200 bg-white text-neutral-700 hover:border-teal-300 hover:bg-teal-50'
-                        }`}
-                      >
-                        <p className="text-sm font-semibold">{AGGREGATION_LABELS[agg]}</p>
-                        <p className="mt-1 text-xs text-neutral-500">
-                          {agg === 'SUM' && 'Sum of numeric field'}
-                          {agg === 'COUNT' && 'Count of records'}
-                          {agg === 'DISTINCT_COUNT' && 'Unique count'}
-                          {agg === 'AVG' && 'Average value'}
-                        </p>
-                      </button>
-                    ),
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              <CardContent className="space-y-4 px-4 pb-4">
+                {dataSources.map((ds, dsIndex) => {
+                  const allObjectFields: FieldMetadata[] =
+                    ds.object ? (OBJECT_FIELDS[ds.object as ObjectType] ?? []) : []
+                  const aggregationCompatibleFields: FieldMetadata[] =
+                    ds.object && ds.aggregation
+                      ? allObjectFields.filter((f) =>
+                          (AGGREGATION_FIELD_TYPES[ds.aggregation as AggregationType] ?? []).includes(
+                            f.type,
+                          ),
+                        )
+                      : []
 
-            {/* Section C – Field */}
-            <Card
-              className={`rounded-lg border border-neutral-200 transition-opacity ${!selectedAggregation ? 'opacity-60' : ''}`}
-            >
-              <CardHeader className="px-4 pb-2 pt-4">
-                <div className="flex items-center gap-2">
-                  <SectionBadge letter="C" />
-                  <CardTitle className="text-base">Select Field</CardTitle>
-                </div>
-                <p className="text-xs text-neutral-500">
-                  {selectedAggregation
-                    ? `Fields filtered for ${AGGREGATION_LABELS[selectedAggregation as AggregationType]}`
-                    : 'Select an aggregation first'}
-                </p>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <Select
-                  value={selectedField}
-                  onValueChange={setSelectedField}
-                  disabled={!selectedAggregation || !selectedObject}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue
-                      placeholder={
-                        aggregationCompatibleFields.length === 0
-                          ? 'No compatible fields'
-                          : 'Select field…'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {aggregationCompatibleFields.map((f) => (
-                      <SelectItem key={f.key} value={f.key}>
-                        <span className="flex items-center gap-2">
-                          {f.label}
-                          <Badge variant="outline" className="text-xs">
-                            {f.type}
-                          </Badge>
+                  return (
+                    <div
+                      key={ds.id}
+                      className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 space-y-4"
+                    >
+                      {/* Data source header */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-neutral-700">
+                          Data Source {dsIndex + 1}
                         </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        {dataSources.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeDataSource(ds.id)}
+                            className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 transition"
+                            aria-label="Remove data source"
+                          >
+                            <FiTrash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
 
-                {selectedAggregation &&
-                  aggregationCompatibleFields.length === 0 &&
-                  selectedObject && (
-                    <p className="mt-2 text-xs text-red-500">
-                      No compatible fields for{' '}
-                      {AGGREGATION_LABELS[selectedAggregation as AggregationType]} on this
-                      object.
-                    </p>
-                  )}
+                      {/* Sub-section A: Object */}
+                      <div>
+                        <Label className="text-xs font-semibold text-neutral-600">
+                          <SectionBadge letter="A" /> Object
+                        </Label>
+                        <Select
+                          value={ds.object}
+                          onValueChange={(v) =>
+                            updateDataSource(ds.id, {
+                              object: v as ObjectType,
+                              field: '',
+                              filters: [],
+                            })
+                          }
+                        >
+                          <SelectTrigger className="mt-1 w-full">
+                            <SelectValue placeholder="Select object…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="policy">Policy</SelectItem>
+                            <SelectItem value="training">Training</SelectItem>
+                            <SelectItem value="sales_activity">Sales Activity</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {ds.object && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {OBJECT_FIELDS[ds.object as ObjectType].map((f) => (
+                              <Badge
+                                key={f.key}
+                                variant="outline"
+                                className="text-xs text-neutral-600"
+                              >
+                                {f.label}
+                                <span className="ml-1 text-neutral-400">({f.type})</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sub-section B: Aggregation */}
+                      <div>
+                        <Label className="text-xs font-semibold text-neutral-600">
+                          <SectionBadge letter="B" /> Aggregation
+                        </Label>
+                        <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {(['SUM', 'COUNT', 'DISTINCT_COUNT', 'AVG'] as AggregationType[]).map(
+                            (agg) => (
+                              <button
+                                key={agg}
+                                type="button"
+                                onClick={() =>
+                                  updateDataSource(ds.id, { aggregation: agg, field: '' })
+                                }
+                                className={`rounded-lg border p-3 text-center transition ${
+                                  ds.aggregation === agg
+                                    ? 'border-teal-500 bg-teal-50 text-teal-700'
+                                    : 'border-neutral-200 bg-white text-neutral-700 hover:border-teal-300 hover:bg-teal-50'
+                                }`}
+                              >
+                                <p className="text-sm font-semibold">{AGGREGATION_LABELS[agg]}</p>
+                                <p className="mt-1 text-xs text-neutral-500">
+                                  {agg === 'SUM' && 'Sum of numeric field'}
+                                  {agg === 'COUNT' && 'Count of records'}
+                                  {agg === 'DISTINCT_COUNT' && 'Unique count'}
+                                  {agg === 'AVG' && 'Average value'}
+                                </p>
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Sub-section C: Field */}
+                      <div
+                        className={`transition-opacity ${!ds.aggregation ? 'opacity-60' : ''}`}
+                      >
+                        <Label className="text-xs font-semibold text-neutral-600">
+                          <SectionBadge letter="C" /> Field
+                        </Label>
+                        <Select
+                          value={ds.field}
+                          onValueChange={(v) => updateDataSource(ds.id, { field: v })}
+                          disabled={!ds.aggregation || !ds.object}
+                        >
+                          <SelectTrigger className="mt-1 w-full">
+                            <SelectValue
+                              placeholder={
+                                aggregationCompatibleFields.length === 0
+                                  ? 'No compatible fields'
+                                  : 'Select field…'
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {aggregationCompatibleFields.map((f) => (
+                              <SelectItem key={f.key} value={f.key}>
+                                <span className="flex items-center gap-2">
+                                  {f.label}
+                                  <Badge variant="outline" className="text-xs">
+                                    {f.type}
+                                  </Badge>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {ds.aggregation && aggregationCompatibleFields.length === 0 && ds.object && (
+                          <p className="mt-1 text-xs text-red-500">
+                            No compatible fields for{' '}
+                            {AGGREGATION_LABELS[ds.aggregation as AggregationType]} on this object.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sub-section E: Filters */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold text-neutral-600">
+                            <SectionBadge letter="E" /> Filters
+                          </Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addFilter(ds.id)}
+                            disabled={!ds.object}
+                            icon={<FiPlus className="h-3 w-3" />}
+                          >
+                            Add Filter
+                          </Button>
+                        </div>
+                        <div className="mt-2 space-y-3">
+                          {ds.filters.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-neutral-300 p-3 text-center">
+                              <p className="text-xs text-neutral-400">
+                                No filters. Click "Add Filter" to begin.
+                              </p>
+                            </div>
+                          ) : (
+                            ds.filters.map((filter, idx) => (
+                              <div key={filter.id} className="space-y-2">
+                                {idx > 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <Separator className="flex-1" />
+                                    <div className="flex gap-1">
+                                      {(['AND', 'OR'] as const).map((op) => (
+                                        <button
+                                          key={op}
+                                          type="button"
+                                          onClick={() =>
+                                            updateFilter(ds.id, filter.id, {
+                                              logicalOperator: op,
+                                            })
+                                          }
+                                          className={`rounded px-2 py-0.5 text-xs font-semibold transition ${
+                                            filter.logicalOperator === op
+                                              ? 'bg-teal-600 text-white'
+                                              : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
+                                          }`}
+                                        >
+                                          {op}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <Separator className="flex-1" />
+                                  </div>
+                                )}
+                                <div className="flex items-start gap-2">
+                                  <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+                                    <Select
+                                      value={filter.field}
+                                      onValueChange={(v) =>
+                                        updateFilter(ds.id, filter.id, { field: v })
+                                      }
+                                    >
+                                      <SelectTrigger className="w-full text-sm">
+                                        <SelectValue placeholder="Field" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {allObjectFields.map((f) => (
+                                          <SelectItem key={f.key} value={f.key}>
+                                            {f.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Select
+                                      value={filter.operator}
+                                      onValueChange={(v) =>
+                                        updateFilter(ds.id, filter.id, {
+                                          operator: v as OperatorType,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="w-full text-sm">
+                                        <SelectValue placeholder="Operator" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {OPERATORS.map((op) => (
+                                          <SelectItem key={op.value} value={op.value}>
+                                            {op.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Input
+                                      label=""
+                                      variant="outlined"
+                                      className="text-sm"
+                                      placeholder={
+                                        filter.operator === 'IN' || filter.operator === 'NOT_IN'
+                                          ? 'e.g., ULIP, TERM'
+                                          : filter.operator === 'BETWEEN'
+                                            ? 'e.g., 2024-01-01,2024-12-31'
+                                            : 'Value'
+                                      }
+                                      value={filter.value}
+                                      onChange={(e) =>
+                                        updateFilter(ds.id, filter.id, { value: e.target.value })
+                                      }
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeFilter(ds.id, filter.id)}
+                                    className="mt-1 rounded p-1.5 text-red-500 transition hover:bg-red-50"
+                                    aria-label="Remove filter"
+                                  >
+                                    <FiTrash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </CardContent>
             </Card>
 
@@ -520,134 +708,6 @@ const IncentiveKPIBuilder = () => {
                     </button>
                   )
                 })}
-              </CardContent>
-            </Card>
-
-            {/* Section E – Filters */}
-            <Card className="rounded-lg border border-neutral-200">
-              <CardHeader className="px-4 pb-2 pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <SectionBadge letter="E" />
-                    <CardTitle className="text-base">Filters</CardTitle>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addFilter}
-                    disabled={!selectedObject}
-                    icon={<FiPlus className="h-3 w-3" />}
-                  >
-                    Add Filter
-                  </Button>
-                </div>
-                <p className="text-xs text-neutral-500">Define conditions to filter the data</p>
-              </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4">
-                {filters.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-center">
-                    <p className="text-sm text-neutral-400">
-                      No filters added. Click "Add Filter" to begin.
-                    </p>
-                  </div>
-                ) : (
-                  filters.map((filter, idx) => (
-                    <div key={filter.id} className="space-y-2">
-                      {/* AND / OR connector between filters */}
-                      {idx > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Separator className="flex-1" />
-                          <div className="flex gap-1">
-                            {(['AND', 'OR'] as const).map((op) => (
-                              <button
-                                key={op}
-                                type="button"
-                                onClick={() => updateFilter(filter.id, { logicalOperator: op })}
-                                className={`rounded px-2 py-0.5 text-xs font-semibold transition ${
-                                  filter.logicalOperator === op
-                                    ? 'bg-teal-600 text-white'
-                                    : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
-                                }`}
-                              >
-                                {op}
-                              </button>
-                            ))}
-                          </div>
-                          <Separator className="flex-1" />
-                        </div>
-                      )}
-
-                      {/* Filter row */}
-                      <div className="flex items-start gap-2">
-                        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-                          {/* Field */}
-                          <Select
-                            value={filter.field}
-                            onValueChange={(v) => updateFilter(filter.id, { field: v })}
-                          >
-                            <SelectTrigger className="w-full text-sm">
-                              <SelectValue placeholder="Field" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {allObjectFields.map((f) => (
-                                <SelectItem key={f.key} value={f.key}>
-                                  {f.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          {/* Operator */}
-                          <Select
-                            value={filter.operator}
-                            onValueChange={(v) =>
-                              updateFilter(filter.id, { operator: v as OperatorType })
-                            }
-                          >
-                            <SelectTrigger className="w-full text-sm">
-                              <SelectValue placeholder="Operator" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {OPERATORS.map((op) => (
-                                <SelectItem key={op.value} value={op.value}>
-                                  {op.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          {/* Value */}
-                          <Input
-                            label=""
-                            variant="outlined"
-                            className="text-sm"
-                            placeholder={
-                              filter.operator === 'IN' || filter.operator === 'NOT_IN'
-                                ? 'e.g., ULIP, TERM'
-                                : filter.operator === 'BETWEEN'
-                                  ? 'e.g., 2024-01-01,2024-12-31'
-                                  : 'Value'
-                            }
-                            value={filter.value}
-                            onChange={(e) =>
-                              updateFilter(filter.id, { value: e.target.value })
-                            }
-                          />
-                        </div>
-
-                        {/* Remove */}
-                        <button
-                          type="button"
-                          onClick={() => removeFilter(filter.id)}
-                          className="mt-1 rounded p-1.5 text-red-500 transition hover:bg-red-50"
-                          aria-label="Remove filter"
-                        >
-                          <FiTrash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
               </CardContent>
             </Card>
 
@@ -766,19 +826,26 @@ const IncentiveKPIBuilder = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                {formulaText ? (
-                  <div className="space-y-1 rounded-lg bg-neutral-50 p-3 font-mono text-sm">
-                    <p className="font-bold text-teal-700">{formulaText.main}</p>
-                    <p className="text-neutral-500">{formulaText.object}</p>
-                    {formulaText.where && (
-                      <>
-                        <p className="text-neutral-400">WHERE</p>
-                        <pre className="whitespace-pre-wrap text-xs text-neutral-600">
-                          {formulaText.where}
-                        </pre>
-                      </>
-                    )}
-                    <p className="text-blue-600">{formulaText.groupBy}</p>
+                {formulaLines.length > 0 ? (
+                  <div className="space-y-3 rounded-lg bg-neutral-50 p-3 font-mono text-sm">
+                    {formulaLines.map((line, idx) => (
+                      <div key={idx} className="space-y-0.5">
+                        {idx > 0 && (
+                          <p className="text-xs font-semibold text-neutral-400">+ (combined)</p>
+                        )}
+                        <p className="font-bold text-teal-700">{line.main}</p>
+                        <p className="text-neutral-500">{line.object}</p>
+                        {line.where && (
+                          <>
+                            <p className="text-neutral-400">WHERE</p>
+                            <pre className="whitespace-pre-wrap text-xs text-neutral-600">
+                              {line.where}
+                            </pre>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    <p className="text-blue-600">GROUP BY {groupBy.join(', ')}</p>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-center">
@@ -858,7 +925,7 @@ const IncentiveKPIBuilder = () => {
                   className="w-full"
                   onClick={() => {
                     // TODO: POST /api/kpi — wire up when backend endpoint is available
-                    console.info('Save KPI Definition:', JSON.stringify(kpiConfig, null, 2))
+                    console.info('Save KPI Definition:', JSON.stringify({ name: kpiName, ...kpiConfig }, null, 2))
                   }}
                 >
                   Save KPI Definition
@@ -897,9 +964,9 @@ const IncentiveKPIBuilder = () => {
                   Close
                 </button>
               </div>
-              {formulaText && (
+              {formulaLines.length > 0 && (
                 <p className="font-mono text-xs text-neutral-500">
-                  {formulaText.main} {formulaText.object}
+                  {formulaLines.map((l) => `${l.main} ${l.object}`).join(' + ')}
                 </p>
               )}
             </CardHeader>
@@ -915,7 +982,7 @@ const IncentiveKPIBuilder = () => {
                         Sales Person
                       </th>
                       <th className="px-4 py-2 text-right text-xs font-semibold text-neutral-600">
-                        {formulaText?.main ?? 'KPI Value'}
+                        {formulaLines[0]?.main ?? 'KPI Value'}
                       </th>
                     </tr>
                   </thead>
@@ -930,7 +997,7 @@ const IncentiveKPIBuilder = () => {
                         </td>
                         <td className="px-4 py-2 text-neutral-800">{row.sales_person}</td>
                         <td className="px-4 py-2 text-right font-semibold text-teal-700">
-                          {selectedAggregation === 'SUM' || selectedAggregation === 'AVG'
+                          {firstAgg === 'SUM' || firstAgg === 'AVG'
                             ? `₹${row.kpi_value.toLocaleString()}`
                             : Math.floor(row.kpi_value / 10000)}
                         </td>
