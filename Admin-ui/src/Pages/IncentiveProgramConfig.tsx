@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
-import { FiCheck, FiInfo, FiSearch } from 'react-icons/fi'
+import { FiCheck, FiCode, FiFilter, FiInfo, FiSearch } from 'react-icons/fi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,10 +20,20 @@ interface KPIEntry {
 
 type KPIRole = 'eligibility' | 'calculation' | 'both'
 
+type ComparisonOperator = '>' | '>=' | '<' | '<=' | '==' | '!='
+type LogicalOperator = 'AND' | 'OR'
+
+interface EligibilityCondition {
+  operator: ComparisonOperator
+  threshold: string
+}
+
 interface SelectedKPI {
   kpiId: string
   role: KPIRole
   weight: number
+  eligibilityCondition: EligibilityCondition
+  logicalOperatorAfter: LogicalOperator
 }
 
 // ─── Shared KPI Library (program-agnostic) ────────────────────────────────────
@@ -117,6 +127,8 @@ const IncentiveProgramConfig = () => {
   // KPI selection
   const [selectedKPIs, setSelectedKPIs] = useState<SelectedKPI[]>([])
   const [kpiSearch, setKpiSearch] = useState('')
+  const [incentiveExpression, setIncentiveExpression] = useState('')
+  const expressionRef = useRef<HTMLTextAreaElement>(null)
 
   const filteredLibrary = useMemo(
     () =>
@@ -135,7 +147,16 @@ const IncentiveProgramConfig = () => {
     setSelectedKPIs((prev) =>
       prev.some((s) => s.kpiId === id)
         ? prev.filter((s) => s.kpiId !== id)
-        : [...prev, { kpiId: id, role: 'calculation', weight: 1 }],
+        : [
+            ...prev,
+            {
+              kpiId: id,
+              role: 'calculation',
+              weight: 1,
+              eligibilityCondition: { operator: '>=', threshold: '' },
+              logicalOperatorAfter: 'AND',
+            },
+          ],
     )
   }
 
@@ -145,8 +166,60 @@ const IncentiveProgramConfig = () => {
     )
   }
 
+  const toVarName = (name: string) =>
+    name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+
+  const updateEligibilityCondition = (id: string, updates: Partial<EligibilityCondition>) => {
+    setSelectedKPIs((prev) =>
+      prev.map((s) =>
+        s.kpiId === id
+          ? { ...s, eligibilityCondition: { ...s.eligibilityCondition, ...updates } }
+          : s,
+      ),
+    )
+  }
+
+  const toggleLogicalOperator = (id: string) => {
+    setSelectedKPIs((prev) =>
+      prev.map((s) =>
+        s.kpiId === id
+          ? { ...s, logicalOperatorAfter: s.logicalOperatorAfter === 'AND' ? 'OR' : 'AND' }
+          : s,
+      ),
+    )
+  }
+
+  const insertVariable = (varName: string) => {
+    const textarea = expressionRef.current
+    if (!textarea) {
+      setIncentiveExpression((prev) => prev + varName)
+      return
+    }
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const newValue =
+      incentiveExpression.slice(0, start) + varName + incentiveExpression.slice(end)
+    setIncentiveExpression(newValue)
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + varName.length
+      textarea.focus()
+    }, 0)
+  }
+
+  const eligibilityKPIs = selectedKPIs.filter(
+    (s) => s.role === 'eligibility' || s.role === 'both',
+  )
+
+  const calculationKPIs = selectedKPIs.filter(
+    (s) => s.role === 'calculation' || s.role === 'both',
+  )
+
   const isSaveValid =
-    programName.trim() !== '' && startDate !== '' && endDate !== '' && selectedKPIs.length > 0
+    programName.trim() !== '' &&
+    startDate !== '' &&
+    endDate !== '' &&
+    selectedKPIs.length > 0 &&
+    (calculationKPIs.length === 0 || incentiveExpression.trim() !== '')
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -175,6 +248,15 @@ const IncentiveProgramConfig = () => {
                 startDate,
                 endDate,
                 kpis: selectedKPIs,
+                eligibilityConditions: eligibilityKPIs.map((sel, idx) => ({
+                  kpiId: sel.kpiId,
+                  operator: sel.eligibilityCondition.operator,
+                  threshold: sel.eligibilityCondition.threshold,
+                  ...(idx < eligibilityKPIs.length - 1 && {
+                    logicalOperatorAfter: sel.logicalOperatorAfter,
+                  }),
+                })),
+                incentiveExpression,
               }
               console.info('Save Program:', JSON.stringify(payload, null, 2))
             }}
@@ -450,6 +532,211 @@ const IncentiveProgramConfig = () => {
             )}
           </div>
         </div>
+
+        {/* ── Eligibility Conditions Builder ── */}
+        {eligibilityKPIs.length > 0 && (
+          <Card className="rounded-lg border border-neutral-200">
+            <CardHeader className="px-4 pb-2 pt-4">
+              <div className="flex items-center gap-2">
+                <FiFilter className="h-4 w-4 text-blue-500" />
+                <CardTitle className="text-base">Eligibility Conditions</CardTitle>
+              </div>
+              <p className="mt-0.5 text-xs text-neutral-500">
+                Define threshold conditions for each eligibility KPI. Sales personnel must
+                satisfy all conditions (combined with the logical operators below) to qualify for
+                this program.
+              </p>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="space-y-2">
+                {eligibilityKPIs.map((sel, idx) => {
+                  const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
+                  if (!kpi) return null
+                  const isLast = idx === eligibilityKPIs.length - 1
+                  return (
+                    <div key={sel.kpiId}>
+                      {/* Condition row */}
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+                        <Badge className="shrink-0 bg-blue-100 text-blue-800 text-xs">
+                          {kpi.name}
+                        </Badge>
+                        <select
+                          value={sel.eligibilityCondition.operator}
+                          onChange={(e) =>
+                            updateEligibilityCondition(sel.kpiId, {
+                              operator: e.target.value as ComparisonOperator,
+                            })
+                          }
+                          className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm text-neutral-800 focus:border-blue-400 focus:outline-none"
+                        >
+                          {(['>', '>=', '<', '<=', '==', '!='] as Array<ComparisonOperator>).map(
+                            (op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                        <Input
+                          label=""
+                          variant="outlined"
+                          className="w-32 text-sm"
+                          placeholder="threshold"
+                          value={sel.eligibilityCondition.threshold}
+                          onChange={(e) =>
+                            updateEligibilityCondition(sel.kpiId, {
+                              threshold: e.target.value,
+                            })
+                          }
+                        />
+                        <div className="ml-1 flex flex-wrap gap-1">
+                          {kpi.dataSources.map((ds, i) => (
+                            <Badge
+                              key={i}
+                              className={`text-xs ${OBJECT_COLORS[ds.object] ?? 'bg-gray-100 text-gray-700'}`}
+                            >
+                              {ds.aggregation}({ds.field})
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* AND / OR toggle between consecutive conditions */}
+                      {!isLast && (
+                        <div className="flex items-center gap-2 py-2 pl-4">
+                          <button
+                            type="button"
+                            onClick={() => toggleLogicalOperator(sel.kpiId)}
+                            className={`rounded-full border px-4 py-1 text-xs font-bold transition ${
+                              sel.logicalOperatorAfter === 'AND'
+                                ? 'border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                : 'border-orange-400 bg-orange-100 text-orange-700 hover:bg-orange-200'
+                            }`}
+                          >
+                            {sel.logicalOperatorAfter}
+                          </button>
+                          <span className="text-xs text-neutral-400">click to toggle</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Condition chain preview */}
+              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <p className="mb-1 text-xs font-semibold text-neutral-500">
+                  Condition Preview:
+                </p>
+                <p className="font-mono text-sm leading-relaxed text-neutral-700">
+                  {eligibilityKPIs.map((sel, idx) => {
+                    const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
+                    const isLast = idx === eligibilityKPIs.length - 1
+                    const cond = sel.eligibilityCondition.threshold
+                      ? `${kpi?.name} ${sel.eligibilityCondition.operator} ${sel.eligibilityCondition.threshold}`
+                      : `${kpi?.name} ${sel.eligibilityCondition.operator} ?`
+                    return (
+                      <span key={sel.kpiId}>
+                        <span className="text-blue-700">{cond}</span>
+                        {!isLast && (
+                          <span
+                            className={`mx-2 font-bold ${
+                              sel.logicalOperatorAfter === 'AND'
+                                ? 'text-blue-500'
+                                : 'text-orange-500'
+                            }`}
+                          >
+                            {sel.logicalOperatorAfter}
+                          </span>
+                        )}
+                      </span>
+                    )
+                  })}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Incentive Calculation Expression ── */}
+        {calculationKPIs.length > 0 && (
+          <Card className="rounded-lg border border-neutral-200">
+            <CardHeader className="px-4 pb-2 pt-4">
+              <div className="flex items-center gap-2">
+                <FiCode className="h-4 w-4 text-green-500" />
+                <CardTitle className="text-base">Incentive Calculation Expression</CardTitle>
+              </div>
+              <p className="mt-0.5 text-xs text-neutral-500">
+                Write a formula using KPI variables to calculate the incentive payout for
+                qualifying sales personnel. Click a variable chip to insert it at the cursor
+                position.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3 px-4 pb-4">
+              {/* Available variables */}
+              <div>
+                <Label className="mb-2 block text-xs font-semibold text-neutral-600">
+                  Available Variables
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {calculationKPIs.map((sel) => {
+                    const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
+                    if (!kpi) return null
+                    const varName = toVarName(kpi.name)
+                    return (
+                      <button
+                        key={sel.kpiId}
+                        type="button"
+                        title={kpi.description}
+                        onClick={() => insertVariable(varName)}
+                        className="rounded border border-green-200 bg-green-50 px-2 py-1 font-mono text-xs text-green-800 transition hover:bg-green-100"
+                      >
+                        {varName}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-neutral-400">
+                  Tip: Use standard arithmetic operators +&nbsp;−&nbsp;*&nbsp;/ and numeric
+                  constants. Example:{' '}
+                  <span className="font-mono">
+                    {toVarName(
+                      KPI_LIBRARY.find((k) => k.id === calculationKPIs[0]?.kpiId)?.name ?? '',
+                    )}{' '}
+                    * 0.05
+                  </span>
+                </p>
+              </div>
+
+              <Separator />
+
+              {/* Expression textarea */}
+              <div>
+                <Label className="mb-1 block text-xs font-semibold text-neutral-600">
+                  Expression *
+                </Label>
+                <textarea
+                  ref={expressionRef}
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  rows={4}
+                  placeholder={`e.g., ${toVarName(KPI_LIBRARY.find((k) => k.id === calculationKPIs[0]?.kpiId)?.name ?? '')} * 0.05`}
+                  value={incentiveExpression}
+                  onChange={(e) => setIncentiveExpression(e.target.value)}
+                />
+              </div>
+
+              {/* Expression preview */}
+              {incentiveExpression.trim() && (
+                <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                  <p className="mb-1 text-xs font-semibold text-green-700">
+                    Expression Preview:
+                  </p>
+                  <p className="font-mono text-sm text-green-800">{incentiveExpression}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
