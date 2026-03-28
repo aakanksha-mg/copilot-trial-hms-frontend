@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { FiCheck, FiCode, FiInfo, FiSearch } from 'react-icons/fi'
+import { FiCheck, FiCode, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import SelectionExpressionBuilder from '@/components/SelectionExpressionBuilder'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,6 +23,18 @@ interface KPIEntry {
 interface SelectedKPI {
   kpiId: string
   weight: number
+}
+
+interface SlabState {
+  id: string
+  programName: string
+  programDescription: string
+  startDate: string
+  endDate: string
+  selectedKPIs: Array<SelectedKPI>
+  criteriaTab: 'selected-kpi' | 'expression'
+  selectionExpression: string
+  incentiveExpression: string
 }
 
 // ─── Shared KPI Library (program-agnostic) ────────────────────────────────────
@@ -91,23 +104,24 @@ const TIME_WINDOW_LABELS: Record<string, string> = {
   ROLLING_WINDOW: 'Rolling Window',
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Utility ─────────────────────────────────────────────────────────────────
 
-const IncentiveProgramConfig = () => {
-  // Program fields
-  const [programName, setProgramName] = useState('')
-  const [programDescription, setProgramDescription] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+const toVarName = (name: string) =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 
-  // Selection expression (ANSI SQL WHERE clause)
-  const [selectionExpression, setSelectionExpression] = useState('')
+// ─── Slab Section Component ───────────────────────────────────────────────────
 
-  // Calculation KPI selection
-  const [selectedKPIs, setSelectedKPIs] = useState<Array<SelectedKPI>>([])
-  const [kpiSearch, setKpiSearch] = useState('')
-  const [incentiveExpression, setIncentiveExpression] = useState('')
+interface SlabSectionProps {
+  slab: SlabState
+  slabNumber: number
+  canRemove: boolean
+  onChange: (updates: Partial<SlabState>) => void
+  onRemove: () => void
+}
+
+const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove }: SlabSectionProps) => {
   const expressionRef = useRef<HTMLTextAreaElement>(null)
+  const [kpiSearch, setKpiSearch] = useState('')
 
   const filteredLibrary = useMemo(
     () =>
@@ -120,256 +134,239 @@ const IncentiveProgramConfig = () => {
     [kpiSearch],
   )
 
-  // Available fields for the selection expression builder (derived from KPI library)
-  const kpiFields = useMemo(
-    () =>
-      KPI_LIBRARY.map((kpi) => ({
-        name: toVarName(kpi.name),
-        label: kpi.name,
-        description: kpi.description,
-      })),
-    [],
-  )
+  const incentivePlaceholder = useMemo(() => {
+    if (slab.selectedKPIs.length === 0) return 'e.g., total_premium_by_sales_personnel * 0.05'
+    const firstName = KPI_LIBRARY.find((k) => k.id === slab.selectedKPIs[0].kpiId)?.name ?? ''
+    return `e.g., ${toVarName(firstName)} * 0.05`
+  }, [slab.selectedKPIs])
 
-  const isKPISelected = (id: string) => selectedKPIs.some((s) => s.kpiId === id)
+  const kpiFields = useMemo(
+      () =>
+        KPI_LIBRARY.map((kpi) => ({
+          name: toVarName(kpi.name),
+          label: kpi.name,
+          description: kpi.description,
+        })),
+      [],
+    )
+
+  const isKPISelected = (id: string) => slab.selectedKPIs.some((s) => s.kpiId === id)
 
   const toggleKPI = (id: string) => {
-    setSelectedKPIs((prev) =>
-      prev.some((s) => s.kpiId === id)
-        ? prev.filter((s) => s.kpiId !== id)
-        : [...prev, { kpiId: id, weight: 1 }],
-    )
+    onChange({
+      selectedKPIs: slab.selectedKPIs.some((s) => s.kpiId === id)
+        ? slab.selectedKPIs.filter((s) => s.kpiId !== id)
+        : [...slab.selectedKPIs, { kpiId: id, weight: 1 }],
+    })
   }
 
   const updateSelectedKPI = (id: string, updates: Partial<Omit<SelectedKPI, 'kpiId'>>) => {
-    setSelectedKPIs((prev) =>
-      prev.map((s) => (s.kpiId === id ? { ...s, ...updates } : s)),
-    )
+    onChange({
+      selectedKPIs: slab.selectedKPIs.map((s) => (s.kpiId === id ? { ...s, ...updates } : s)),
+    })
   }
-
-  const toVarName = (name: string) =>
-    name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 
   const insertVariable = (varName: string) => {
     const textarea = expressionRef.current
     if (!textarea) {
-      setIncentiveExpression((prev) => prev + varName)
+      onChange({ incentiveExpression: slab.incentiveExpression + varName })
       return
     }
     const start = textarea.selectionStart
     const end = textarea.selectionEnd
     const newValue =
-      incentiveExpression.slice(0, start) + varName + incentiveExpression.slice(end)
-    setIncentiveExpression(newValue)
+      slab.incentiveExpression.slice(0, start) + varName + slab.incentiveExpression.slice(end)
+    onChange({ incentiveExpression: newValue })
     setTimeout(() => {
       textarea.selectionStart = textarea.selectionEnd = start + varName.length
       textarea.focus()
     }, 0)
   }
 
-  const isSaveValid =
-    programName.trim() !== '' &&
-    startDate !== '' &&
-    endDate !== '' &&
-    selectionExpression.trim() !== '' &&
-    (selectedKPIs.length === 0 || incentiveExpression.trim() !== '')
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-
   return (
-    <div className="min-h-screen py-2">
-      <div className="max-w-full space-y-4 p-2">
-        {/* Header */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Program Configuration</h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Configure an incentive program — define selection criteria with an SQL expression
-              and optionally pick KPIs for incentive calculation
-            </p>
-          </div>
-          <Button
-            variant="green"
-            size="sm"
-            disabled={!isSaveValid}
-            icon={<FiCheck className="h-4 w-4" />}
-            onClick={() => {
-              // TODO: POST /api/programs — wire up when backend endpoint is available
-              const payload = {
-                name: programName,
-                description: programDescription,
-                startDate,
-                endDate,
-                selectionExpression,
-                calculationKPIs: selectedKPIs,
-                incentiveExpression,
-              }
-              console.info('Save Program:', JSON.stringify(payload, null, 2))
-            }}
+    <div className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+      {/* Slab Header */}
+      <div className="flex items-center justify-between rounded-t-xl border-b border-neutral-200 bg-neutral-50 px-4 py-3">
+        <h2 className="text-base font-semibold text-neutral-800">Slab {slabNumber}</h2>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 transition hover:bg-red-50"
           >
-            Save Program
-          </Button>
-        </div>
+            <FiTrash2 className="h-3.5 w-3.5" />
+            Remove
+          </button>
+        )}
+      </div>
 
-        {/* ── Selection Expression Builder ── */}
-        <SelectionExpressionBuilder
-          expression={selectionExpression}
-          onChange={setSelectionExpression}
-          availableFields={kpiFields}
-        />
+      <div className="space-y-4 p-4">
+        {/* ── 1. Program Details ── */}
+        <Card className="rounded-lg border border-neutral-200">
+          <CardHeader className="px-4 pb-2 pt-4">
+            <CardTitle className="text-base">Program Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 px-4 pb-4">
+            <div>
+              <Label className="text-xs font-semibold text-neutral-600">Program Name *</Label>
+              <Input
+                label=""
+                variant="outlined"
+                className="mt-1"
+                placeholder="e.g., Q1 2025 Sales Excellence Program"
+                value={slab.programName}
+                onChange={(e) => onChange({ programName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-neutral-600">Description</Label>
+              <textarea
+                className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                rows={3}
+                placeholder="Describe the objectives and scope of this incentive program…"
+                value={slab.programDescription}
+                onChange={(e) => onChange({ programDescription: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-neutral-600">Start Date *</Label>
+                <Input
+                  label=""
+                  variant="outlined"
+                  type="date"
+                  className="mt-1"
+                  value={slab.startDate}
+                  onChange={(e) => onChange({ startDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-neutral-600">End Date *</Label>
+                <Input
+                  label=""
+                  variant="outlined"
+                  type="date"
+                  className="mt-1"
+                  value={slab.endDate}
+                  onChange={(e) => onChange({ endDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {/* ── LEFT: Program Details + KPI Library ── */}
-          <div className="space-y-4 xl:col-span-2">
-            {/* Program Details */}
-            <Card className="rounded-lg border border-neutral-200">
-              <CardHeader className="px-4 pb-2 pt-4">
-                <CardTitle className="text-base">Program Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4">
-                <div>
-                  <Label className="text-xs font-semibold text-neutral-600">Program Name *</Label>
-                  <Input
-                    label=""
-                    variant="outlined"
-                    className="mt-1"
-                    placeholder="e.g., Q1 2025 Sales Excellence Program"
-                    value={programName}
-                    onChange={(e) => setProgramName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-neutral-600">Description</Label>
-                  <textarea
-                    className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                    rows={3}
-                    placeholder="Describe the objectives and scope of this incentive program…"
-                    value={programDescription}
-                    onChange={(e) => setProgramDescription(e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs font-semibold text-neutral-600">Start Date *</Label>
-                    <Input
-                      label=""
-                      variant="outlined"
-                      type="date"
-                      className="mt-1"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold text-neutral-600">End Date *</Label>
-                    <Input
-                      label=""
-                      variant="outlined"
-                      type="date"
-                      className="mt-1"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* KPI Library — Calculation */}
-            <Card className="rounded-lg border border-neutral-200">
-              <CardHeader className="px-4 pb-2 pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Select KPIs for Calculation</CardTitle>
-                    <p className="mt-0.5 text-xs text-neutral-500">
-                      Choose pre-defined KPIs to use in the incentive calculation formula.
-                      These KPIs are independent of the selection expression above.
-                    </p>
-                  </div>
-                  <Badge className="ml-2 bg-teal-100 text-teal-800">
-                    {selectedKPIs.length} selected
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                {/* Search */}
-                <div className="relative mb-3">
-                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                  <Input
-                    label=""
-                    variant="outlined"
-                    className="pl-9"
-                    placeholder="Search KPIs…"
-                    value={kpiSearch}
-                    onChange={(e) => setKpiSearch(e.target.value)}
-                  />
-                </div>
-
-                {/* KPI list */}
-                <div className="space-y-2">
-                  {filteredLibrary.map((kpi) => {
-                    const selected = isKPISelected(kpi.id)
-                    return (
-                      <button
-                        key={kpi.id}
-                        type="button"
-                        onClick={() => toggleKPI(kpi.id)}
-                        className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition ${
-                          selected
-                            ? 'border-teal-400 bg-teal-50'
-                            : 'border-neutral-200 hover:border-teal-300 hover:bg-teal-50'
-                        }`}
-                      >
-                        <Checkbox
-                          checked={selected}
-                          onCheckedChange={() => toggleKPI(kpi.id)}
-                          className="mt-0.5 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-neutral-800">{kpi.name}</p>
-                          <p className="text-xs text-neutral-500 mt-0.5">{kpi.description}</p>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {kpi.dataSources.map((ds, idx) => (
-                              <Badge
-                                key={idx}
-                                className={`text-xs ${OBJECT_COLORS[ds.object] ?? 'bg-gray-100 text-gray-700'}`}
-                              >
-                                {ds.object}: {ds.aggregation}({ds.field})
-                              </Badge>
-                            ))}
-                            <Badge className="bg-indigo-100 text-indigo-700 text-xs">
-                              {TIME_WINDOW_LABELS[kpi.timeWindow] ?? kpi.timeWindow}
-                            </Badge>
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* ── RIGHT: Selected KPIs Configuration ── */}
-          <div className="space-y-4">
-            <Card className="rounded-lg border border-neutral-200">
-              <CardHeader className="px-4 pb-2 pt-4">
-                <CardTitle className="text-base">Selected KPIs</CardTitle>
-                <p className="text-xs text-neutral-500">
-                  Configure the role and weight of each selected KPI
+        {/* ── 2. Select KPIs for Calculation ── */}
+        <Card className="rounded-lg border border-neutral-200">
+          <CardHeader className="px-4 pb-2 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Select KPIs for Calculation</CardTitle>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  Choose pre-defined KPIs to use in the incentive calculation formula.
                 </p>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                {selectedKPIs.length === 0 ? (
+              </div>
+              <Badge className="ml-2 bg-teal-100 text-teal-800">
+                {slab.selectedKPIs.length} selected
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {/* Search */}
+            <div className="relative mb-3">
+              <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <Input
+                label=""
+                variant="outlined"
+                className="pl-9"
+                placeholder="Search KPIs…"
+                value={kpiSearch}
+                onChange={(e) => setKpiSearch(e.target.value)}
+              />
+            </div>
+            {/* KPI list */}
+            <div className="space-y-2">
+              {filteredLibrary.map((kpi) => {
+                const selected = isKPISelected(kpi.id)
+                return (
+                  <button
+                    key={kpi.id}
+                    type="button"
+                    onClick={() => toggleKPI(kpi.id)}
+                    className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition ${
+                      selected
+                        ? 'border-teal-400 bg-teal-50'
+                        : 'border-neutral-200 hover:border-teal-300 hover:bg-teal-50'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={() => toggleKPI(kpi.id)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-neutral-800">{kpi.name}</p>
+                      <p className="mt-0.5 text-xs text-neutral-500">{kpi.description}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {kpi.dataSources.map((ds, idx) => (
+                          <Badge
+                            key={idx}
+                            className={`text-xs ${OBJECT_COLORS[ds.object] ?? 'bg-gray-100 text-gray-700'}`}
+                          >
+                            {ds.object}: {ds.aggregation}({ds.field})
+                          </Badge>
+                        ))}
+                        <Badge className="bg-indigo-100 text-indigo-700 text-xs">
+                          {TIME_WINDOW_LABELS[kpi.timeWindow] ?? kpi.timeWindow}
+                        </Badge>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── 3. Filter Criteria — tabbed: Selected KPI | Selection Expression ── */}
+        <Card className="rounded-lg border border-neutral-200">
+          <CardHeader className="px-4 pb-2 pt-4">
+            <CardTitle className="text-base">Filter Criteria</CardTitle>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Define which sales personnel qualify for this slab. Use the{' '}
+              <strong>Selected KPI</strong> tab to configure KPI weights, or switch to{' '}
+              <strong>Selection Expression</strong> for advanced SQL-based filtering.
+            </p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <Tabs
+              value={slab.criteriaTab}
+              onValueChange={(v) =>
+                onChange({ criteriaTab: v as SlabState['criteriaTab'] })
+              }
+            >
+              <TabsList className="mb-4">
+                <TabsTrigger value="selected-kpi" className="gap-1.5">
+                  <FiInfo className="h-3.5 w-3.5" />
+                  Selected KPI
+                </TabsTrigger>
+                <TabsTrigger value="expression" className="gap-1.5">
+                  <FiFilter className="h-3.5 w-3.5" />
+                  Selection Expression
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab: Selected KPI */}
+              <TabsContent value="selected-kpi">
+                {slab.selectedKPIs.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-neutral-300 p-6 text-center">
                     <FiInfo className="mx-auto mb-2 h-5 w-5 text-neutral-400" />
                     <p className="text-xs text-neutral-400">
-                      No KPIs selected yet. Choose from the library on the left.
+                      No KPIs selected yet. Choose from the library above.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {selectedKPIs.map((sel, idx) => {
+                    {slab.selectedKPIs.map((sel, idx) => {
                       const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
                       if (!kpi) return null
                       return (
@@ -388,8 +385,6 @@ const IncentiveProgramConfig = () => {
                               ))}
                             </div>
                           </div>
-
-                          {/* Weight */}
                           <div className="flex items-center gap-2">
                             <Label className="whitespace-nowrap text-xs font-semibold text-neutral-600">
                               Weight
@@ -418,68 +413,46 @@ const IncentiveProgramConfig = () => {
                     })}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </TabsContent>
 
-            {/* Summary */}
-            {selectedKPIs.length > 0 && (
-              <Card className="rounded-lg border border-neutral-200 bg-neutral-50">
-                <CardHeader className="px-4 pb-2 pt-4">
-                  <CardTitle className="text-sm text-neutral-700">Program Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 px-4 pb-4 text-xs text-neutral-600">
-                  <p>
-                    <span className="font-semibold">Name:</span>{' '}
-                    {programName || <span className="italic text-neutral-400">not set</span>}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Period:</span>{' '}
-                    {startDate && endDate
-                      ? `${startDate} → ${endDate}`
-                      : <span className="italic text-neutral-400">not set</span>}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Calculation KPIs:</span> {selectedKPIs.length}
-                  </p>
-                  <ul className="list-disc ml-4 space-y-0.5">
-                    {selectedKPIs.map((sel) => {
-                      const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
-                      return (
-                        <li key={sel.kpiId}>
-                          {kpi?.name}
-                          <span className="ml-1 text-neutral-400">×{sel.weight}</span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+              {/* Tab: Selection Expression */}
+              <TabsContent value="expression">
+                <SelectionExpressionBuilder
+                  expression={slab.selectionExpression}
+                  onChange={(expr) => onChange({ selectionExpression: expr })}
+                  availableFields={kpiFields}
+                />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
-        {/* ── Incentive Calculation Expression ── */}
-        {selectedKPIs.length > 0 && (
-          <Card className="rounded-lg border border-neutral-200">
-            <CardHeader className="px-4 pb-2 pt-4">
-              <div className="flex items-center gap-2">
-                <FiCode className="h-4 w-4 text-green-500" />
-                <CardTitle className="text-base">Incentive Calculation Expression</CardTitle>
-              </div>
-              <p className="mt-0.5 text-xs text-neutral-500">
-                Write a formula using KPI variables to calculate the incentive payout for
-                qualifying sales personnel. Click a variable chip to insert it at the cursor
-                position.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3 px-4 pb-4">
-              {/* Available variables */}
-              <div>
-                <Label className="mb-2 block text-xs font-semibold text-neutral-600">
-                  Available Variables
-                </Label>
+        {/* ── 4. Incentive Calculation Expression ── */}
+        <Card className="rounded-lg border border-neutral-200">
+          <CardHeader className="px-4 pb-2 pt-4">
+            <div className="flex items-center gap-2">
+              <FiCode className="h-4 w-4 text-green-500" />
+              <CardTitle className="text-base">Incentive Calculation</CardTitle>
+            </div>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Write a formula using KPI variables to calculate the incentive payout for
+              qualifying sales personnel. Click a variable chip to insert it at the cursor
+              position.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3 px-4 pb-4">
+            {/* Available variables */}
+            <div>
+              <Label className="mb-2 block text-xs font-semibold text-neutral-600">
+                Available Variables
+              </Label>
+              {slab.selectedKPIs.length === 0 ? (
+                <p className="text-xs text-neutral-400">
+                  Select KPIs above to make variables available here.
+                </p>
+              ) : (
                 <div className="flex flex-wrap gap-2">
-                  {selectedKPIs.map((sel) => {
+                  {slab.selectedKPIs.map((sel) => {
                     const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
                     if (!kpi) return null
                     const varName = toVarName(kpi.name)
@@ -496,47 +469,141 @@ const IncentiveProgramConfig = () => {
                     )
                   })}
                 </div>
+              )}
+              {slab.selectedKPIs.length > 0 && (
                 <p className="mt-1.5 text-xs text-neutral-400">
                   Tip: Use standard arithmetic operators +&nbsp;−&nbsp;*&nbsp;/ and numeric
                   constants. Example:{' '}
-                  <span className="font-mono">
-                    {toVarName(
-                      KPI_LIBRARY.find((k) => k.id === selectedKPIs[0]?.kpiId)?.name ?? '',
-                    )}{' '}
-                    * 0.05
-                  </span>
+                  <span className="font-mono">{incentivePlaceholder.replace('e.g., ', '')}</span>
                 </p>
-              </div>
-
-              <Separator />
-
-              {/* Expression textarea */}
-              <div>
-                <Label className="mb-1 block text-xs font-semibold text-neutral-600">
-                  Expression *
-                </Label>
-                <textarea
-                  ref={expressionRef}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
-                  rows={4}
-                  placeholder={`e.g., ${toVarName(KPI_LIBRARY.find((k) => k.id === selectedKPIs[0]?.kpiId)?.name ?? '')} * 0.05`}
-                  value={incentiveExpression}
-                  onChange={(e) => setIncentiveExpression(e.target.value)}
-                />
-              </div>
-
-              {/* Expression preview */}
-              {incentiveExpression.trim() && (
-                <div className="rounded-lg border border-green-100 bg-green-50 p-3">
-                  <p className="mb-1 text-xs font-semibold text-green-700">
-                    Expression Preview:
-                  </p>
-                  <p className="font-mono text-sm text-green-800">{incentiveExpression}</p>
-                </div>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
+
+            <Separator />
+
+            {/* Expression textarea */}
+            <div>
+              <Label className="mb-1 block text-xs font-semibold text-neutral-600">
+                Expression *
+              </Label>
+              <textarea
+                ref={expressionRef}
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                rows={4}
+                placeholder={incentivePlaceholder}
+                value={slab.incentiveExpression}
+                onChange={(e) => onChange({ incentiveExpression: e.target.value })}
+              />
+            </div>
+
+            {/* Expression preview */}
+            {slab.incentiveExpression.trim() && (
+              <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                <p className="mb-1 text-xs font-semibold text-green-700">Expression Preview:</p>
+                <p className="font-mono text-sm text-green-800">{slab.incentiveExpression}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const createSlab = (): SlabState => ({
+  id: crypto.randomUUID(),
+  programName: '',
+  programDescription: '',
+  startDate: '',
+  endDate: '',
+  selectedKPIs: [],
+  criteriaTab: 'selected-kpi',
+  selectionExpression: '',
+  incentiveExpression: '',
+})
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const IncentiveProgramConfig = () => {
+  const [slabs, setSlabs] = useState<Array<SlabState>>(() => [createSlab()])
+
+  const updateSlab = (id: string, updates: Partial<SlabState>) => {
+    setSlabs((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
+  }
+
+  const addSlab = () => {
+    setSlabs((prev) => [...prev, createSlab()])
+  }
+
+  const removeSlab = (id: string) => {
+    setSlabs((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  const isAllValid = slabs.every((s) => {
+    if (s.programName.trim() === '' || s.startDate === '' || s.endDate === '') return false
+    if (s.criteriaTab === 'expression') return s.selectionExpression.trim() !== ''
+    return s.selectedKPIs.length > 0
+  })
+
+  return (
+    <div className="min-h-screen py-2">
+      <div className="max-w-full space-y-4 p-2">
+        {/* Header */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">Program Configuration</h1>
+            <p className="mt-1 text-sm text-neutral-500">
+              Configure one or more incentive slabs — each slab defines its own program details,
+              KPI selection, filter criteria, and incentive calculation formula.
+            </p>
+          </div>
+          <Button
+            variant="green"
+            size="sm"
+            disabled={!isAllValid}
+            icon={<FiCheck className="h-4 w-4" />}
+            onClick={() => {
+              // TODO: POST /api/programs — wire up when backend endpoint is available
+              const payload = slabs.map((s) => ({
+                name: s.programName,
+                description: s.programDescription,
+                startDate: s.startDate,
+                endDate: s.endDate,
+                selectedKPIs: s.selectedKPIs,
+                criteriaTab: s.criteriaTab,
+                selectionExpression: s.selectionExpression,
+                incentiveExpression: s.incentiveExpression,
+              }))
+              console.info('Save Programs:', JSON.stringify(payload, null, 2))
+            }}
+          >
+            Save All Slabs
+          </Button>
+        </div>
+
+        {/* Slabs */}
+        {slabs.map((slab, index) => (
+          <SlabSection
+            key={slab.id}
+            slab={slab}
+            slabNumber={index + 1}
+            canRemove={slabs.length > 1}
+            onChange={(updates) => updateSlab(slab.id, updates)}
+            onRemove={() => removeSlab(slab.id)}
+          />
+        ))}
+
+        {/* Add Slab */}
+        <button
+          type="button"
+          onClick={addSlab}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-4 text-sm font-medium text-neutral-500 transition hover:border-teal-400 hover:text-teal-600"
+        >
+          <FiPlus className="h-4 w-4" />
+          Add Slab
+        </button>
       </div>
     </div>
   )
