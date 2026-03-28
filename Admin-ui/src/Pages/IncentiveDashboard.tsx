@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { FiDownload, FiExternalLink, FiPlus, FiSearch, FiUpload, FiUserPlus } from 'react-icons/fi'
+import { Link } from '@tanstack/react-router'
+import { FiBookOpen, FiDownload, FiExternalLink, FiPlus, FiSearch, FiSettings, FiUpload, FiUserPlus } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -60,21 +61,37 @@ const quickActions = [
     title: 'Create Incentive Plan',
     subtitle: 'Configure a new payout plan',
     icon: FiPlus,
+    to: '/search/incentive/program-config' as const,
+  },
+  {
+    title: 'KPI Library',
+    subtitle: 'Browse and manage pre-defined KPIs',
+    icon: FiBookOpen,
+    to: '/search/incentive/kpi-library' as const,
+  },
+  {
+    title: 'KPI Builder',
+    subtitle: 'Create a new program-agnostic KPI',
+    icon: FiSettings,
+    to: '/search/incentive' as const,
   },
   {
     title: 'Add Agent Target',
     subtitle: 'Assign agent-wise goals',
     icon: FiUserPlus,
+    to: null,
   },
   {
     title: 'Export Incentive Data',
     subtitle: 'Download monthly payout report',
     icon: FiDownload,
+    to: null,
   },
   {
     title: 'Import Payout File',
     subtitle: 'Upload processed payout file',
     icon: FiUpload,
+    to: null,
   },
 ]
 
@@ -224,12 +241,8 @@ const IncentiveDashboard = () => {
               <CardContent className="space-y-3 px-4">
                 {quickActions.map((item) => {
                   const Icon = item.icon
-                  return (
-                    <button
-                      key={item.title}
-                      type="button"
-                      className="flex w-full items-center gap-3 rounded-md border border-gray-100 bg-gray-100 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                    >
+                  const inner = (
+                    <>
                       <div className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-gray-700">
                         <Icon className="h-4 w-4" />
                       </div>
@@ -237,6 +250,20 @@ const IncentiveDashboard = () => {
                         <p className="text-sm font-bold text-gray-800">{item.title}</p>
                         <p className="text-xs text-gray-500">{item.subtitle}</p>
                       </div>
+                    </>
+                  )
+                  const className =
+                    'flex w-full items-center gap-3 rounded-md border border-gray-100 bg-gray-100 p-3 text-left transition hover:bg-white hover:shadow-sm'
+                  if (item.to) {
+                    return (
+                      <Link key={item.title} to={item.to} className={className}>
+                        {inner}
+                      </Link>
+                    )
+                  }
+                  return (
+                    <button key={item.title} type="button" className={className}>
+                      {inner}
                     </button>
                   )
                 })}
