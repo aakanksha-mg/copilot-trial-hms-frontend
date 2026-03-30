@@ -502,9 +502,10 @@ export interface FileRoutesByFullPath {
   '/search/commission/processcommission': typeof AuthSearchCommissionProcesscommissionIndexLazyRoute
   '/search/dashboard/code-movement': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/search/incentive/kpi-library': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
-  '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
   '/search/incentive/product-weightage': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
+  '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
 }
+export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$not-found': typeof NotFoundRoute
   '/login': typeof LoginLazyRoute
@@ -550,8 +551,8 @@ export interface FileRoutesByFullPath {
   '/search/commission/processcommission': typeof AuthSearchCommissionProcesscommissionIndexLazyRoute
   '/search/dashboard/code-movement': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/search/incentive/kpi-library': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
-  '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
   '/search/incentive/product-weightage': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
+  '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -601,8 +602,8 @@ export interface FileRoutesById {
   '/_auth/search/commission/processcommission/': typeof AuthSearchCommissionProcesscommissionIndexLazyRoute
   '/_auth/search/dashboard/code-movement/': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/_auth/search/incentive/kpi-library/': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
-  '/_auth/search/incentive/program-config/': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
   '/_auth/search/incentive/product-weightage/': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
+  '/_auth/search/incentive/program-config/': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -652,8 +653,8 @@ export interface FileRouteTypes {
     | '/search/commission/processcommission'
     | '/search/dashboard/code-movement'
     | '/search/incentive/kpi-library'
-    | '/search/incentive/program-config'
     | '/search/incentive/product-weightage'
+    | '/search/incentive/program-config'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -701,8 +702,8 @@ export interface FileRouteTypes {
     | '/search/commission/processcommission'
     | '/search/dashboard/code-movement'
     | '/search/incentive/kpi-library'
-    | '/search/incentive/program-config'
     | '/search/incentive/product-weightage'
+    | '/search/incentive/program-config'
   id:
     | '__root__'
     | '/'
@@ -751,8 +752,8 @@ export interface FileRouteTypes {
     | '/_auth/search/commission/processcommission/'
     | '/_auth/search/dashboard/code-movement/'
     | '/_auth/search/incentive/kpi-library/'
-    | '/_auth/search/incentive/program-config/'
     | '/_auth/search/incentive/product-weightage/'
+    | '/_auth/search/incentive/program-config/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1146,8 +1147,8 @@ interface AuthRouteChildren {
   AuthSearchCommissionProcesscommissionIndexLazyRoute: typeof AuthSearchCommissionProcesscommissionIndexLazyRoute
   AuthSearchDashboardCodeMovementIndexLazyRoute: typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   AuthSearchIncentiveKpiLibraryIndexLazyRoute: typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
-  AuthSearchIncentiveProgramConfigIndexLazyRoute: typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
   AuthSearchIncentiveProductWeightageIndexLazyRoute: typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
+  AuthSearchIncentiveProgramConfigIndexLazyRoute: typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -1211,10 +1212,10 @@ const AuthRouteChildren: AuthRouteChildren = {
     AuthSearchDashboardCodeMovementIndexLazyRoute,
   AuthSearchIncentiveKpiLibraryIndexLazyRoute:
     AuthSearchIncentiveKpiLibraryIndexLazyRoute,
-  AuthSearchIncentiveProgramConfigIndexLazyRoute:
-    AuthSearchIncentiveProgramConfigIndexLazyRoute,
   AuthSearchIncentiveProductWeightageIndexLazyRoute:
     AuthSearchIncentiveProductWeightageIndexLazyRoute,
+  AuthSearchIncentiveProgramConfigIndexLazyRoute:
+    AuthSearchIncentiveProgramConfigIndexLazyRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
