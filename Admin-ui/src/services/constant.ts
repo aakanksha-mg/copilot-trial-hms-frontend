@@ -62,6 +62,19 @@ export const APIRoutes = {
   GET_PRODUCTS: 'GetProducts',
   SAVE_CUSTOM_FIELD: 'saveCustomField',
   GET_CUSTOM_FIELDS: 'getCustomFields',
+  // Incentive
+  GET_INCENTIVE_KPI_LIBRARY: 'getIncentiveKpiLibrary',
+  GET_INCENTIVE_KPI_BY_ID: 'getIncentiveKpiById',
+  CREATE_INCENTIVE_KPI: 'createIncentiveKpi',
+  UPDATE_INCENTIVE_KPI: 'updateIncentiveKpi',
+  DELETE_INCENTIVE_KPI: 'deleteIncentiveKpi',
+  GET_INCENTIVE_FILTERS: 'getIncentiveFilters',
+  GET_INCENTIVE_PROGRAMS: 'getIncentivePrograms',
+  GET_INCENTIVE_PROGRAM_BY_ID: 'getIncentiveProgramById',
+  CREATE_INCENTIVE_PROGRAM: 'createIncentiveProgram',
+  UPDATE_INCENTIVE_PROGRAM: 'updateIncentiveProgram',
+  GET_INCENTIVE_PROGRAM_PRODUCT_WEIGHTAGE: 'getIncentiveProgramProductWeightage',
+  SAVE_INCENTIVE_PROGRAM_PRODUCT_WEIGHTAGE: 'saveIncentiveProgramProductWeightage',
 }
 
 export const LoginConstants = {

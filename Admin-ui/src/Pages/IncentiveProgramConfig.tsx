@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FiCheck, FiChevronRight, FiCode, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
@@ -9,16 +9,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import SelectionExpressionBuilder from '@/components/SelectionExpressionBuilder'
+import { incentiveService } from '@/services/incentiveService'
+import type { IKpi, IIncentiveProgram } from '@/models/incentive'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface KPIEntry {
-  id: string
-  name: string
-  description: string
-  dataSources: Array<{ object: string; aggregation: string; field: string }>
-  timeWindow: string
-}
+type KPIEntry = IKpi
 
 interface SelectedKPI {
   kpiId: string
@@ -52,60 +48,9 @@ interface PastCycle {
   executionDate: string
 }
 
-// ─── Shared KPI Library (program-agnostic) ────────────────────────────────────
+// ─── Shared KPI Library (loaded from API) ────────────────────────────────────
 
-const KPI_LIBRARY: Array<KPIEntry> = [
-  {
-    id: 'kpi-001',
-    name: 'Total Premium by Sales Personnel',
-    description: 'Sums up annualized premium across all active policies per sales agent.',
-    dataSources: [{ object: 'Policy', aggregation: 'SUM', field: 'Annualized Premium' }],
-    timeWindow: 'PROGRAM_DURATION',
-  },
-  {
-    id: 'kpi-002',
-    name: 'Unique Policies Sold',
-    description: 'Counts distinct policy IDs issued by a sales agent within the program period.',
-    dataSources: [{ object: 'Policy', aggregation: 'DISTINCT_COUNT', field: 'Policy ID' }],
-    timeWindow: 'PROGRAM_DURATION',
-  },
-  {
-    id: 'kpi-003',
-    name: 'Training Completion Rate',
-    description: 'Average training completion percentage across mandatory training modules.',
-    dataSources: [{ object: 'Training', aggregation: 'AVG', field: 'Completion %' }],
-    timeWindow: 'ROLLING_WINDOW',
-  },
-  {
-    id: 'kpi-004',
-    name: 'Premium + Training Score (Composite)',
-    description: 'Composite KPI combining total premium and average training score.',
-    dataSources: [
-      { object: 'Policy', aggregation: 'SUM', field: 'Premium Amount' },
-      { object: 'Training', aggregation: 'AVG', field: 'Training Score' },
-    ],
-    timeWindow: 'PROGRAM_DURATION',
-  },
-  {
-    id: 'kpi-005',
-    name: 'Lead Conversion Count',
-    description: 'Total number of leads converted to policies by the sales agent.',
-    dataSources: [{ object: 'Sales Activity', aggregation: 'SUM', field: 'Conversion Count' }],
-    timeWindow: 'CUSTOM_RANGE',
-  },
-  {
-    id: 'kpi-006',
-    name: 'Multi-Source Eligibility KPI',
-    description:
-      'Determines eligibility based on policy premium, training completion, and meeting count.',
-    dataSources: [
-      { object: 'Policy', aggregation: 'SUM', field: 'Annualized Premium' },
-      { object: 'Training', aggregation: 'AVG', field: 'Completion %' },
-      { object: 'Sales Activity', aggregation: 'COUNT', field: 'Meeting Count' },
-    ],
-    timeWindow: 'PROGRAM_DURATION',
-  },
-]
+const KPI_LIBRARY_PLACEHOLDER: KPIEntry[] = []
 
 const OBJECT_COLORS: Record<string, string> = {
   Policy: 'bg-teal-100 text-teal-800',
@@ -181,16 +126,6 @@ const DESIGNATIONS_BY_BRANCH: Record<string, string[]> = {
   'Mumbai Nariman Point': ['Reinsurance Manager', 'Senior Underwriter'],
 }
 
-// ─── Past Qualified Cycles Mock Data ─────────────────────────────────────────
-
-const PAST_QUALIFIED_CYCLES: PastCycle[] = [
-  { date: '2024-12-31', name: 'Q4 2024 Performance Incentive', executionDate: '2025-01-15' },
-  { date: '2024-09-30', name: 'Q3 2024 Sales Excellence Program', executionDate: '2024-10-12' },
-  { date: '2024-06-30', name: 'Q2 2024 Bancassurance Boost', executionDate: '2024-07-10' },
-  { date: '2024-03-31', name: 'Q1 2024 Agency Growth Drive', executionDate: '2024-04-15' },
-  { date: '2023-12-31', name: 'Annual 2023 Champion Award', executionDate: '2024-01-20' },
-]
-
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 const toVarName = (name: string) =>
@@ -201,9 +136,11 @@ const toVarName = (name: string) =>
 interface AgentFilterProps {
   filter: AgentFilterState
   onChange: (updates: Partial<AgentFilterState>) => void
+  apiDesignations: Record<string, string[]>
+  designationsLoading: boolean
 }
 
-const AgentFilter = ({ filter, onChange }: AgentFilterProps) => {
+const AgentFilter = ({ filter, onChange, apiDesignations, designationsLoading }: AgentFilterProps) => {
   const availableSubChannels = useMemo(() => {
     if (filter.channels.length === 0) return []
     const scSet = new Set<string>()
@@ -225,11 +162,17 @@ const AgentFilter = ({ filter, onChange }: AgentFilterProps) => {
   const availableDesignations = useMemo(() => {
     if (filter.branches.length === 0) return []
     const desigSet = new Set<string>()
+    // Prefer API-loaded designations; fall back to static mock
     filter.branches.forEach((branch) => {
-      ;(DESIGNATIONS_BY_BRANCH[branch] ?? []).forEach((d) => desigSet.add(d))
+      const apiDesigs = apiDesignations[branch]
+      if (apiDesigs && apiDesigs.length > 0) {
+        apiDesigs.forEach((d) => desigSet.add(d))
+      } else {
+        ;(DESIGNATIONS_BY_BRANCH[branch] ?? []).forEach((d) => desigSet.add(d))
+      }
     })
     return Array.from(desigSet).sort()
-  }, [filter.branches])
+  }, [filter.branches, apiDesignations])
 
   const toggleChannel = (ch: string) => {
     const newChannels = filter.channels.includes(ch)
@@ -418,6 +361,10 @@ const AgentFilter = ({ filter, onChange }: AgentFilterProps) => {
               <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
                 Select Branches first
               </p>
+            ) : designationsLoading ? (
+              <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
+                Loading designations…
+              </p>
             ) : availableDesignations.length === 0 ? (
               <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
                 No designations available
@@ -555,37 +502,38 @@ interface SlabSectionProps {
   canRemove: boolean
   onChange: (updates: Partial<SlabState>) => void
   onRemove: () => void
+  kpiLibrary: KPIEntry[]
 }
 
-const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove }: SlabSectionProps) => {
+const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove, kpiLibrary }: SlabSectionProps) => {
   const expressionRef = useRef<HTMLTextAreaElement>(null)
   const [kpiSearch, setKpiSearch] = useState('')
 
   const filteredLibrary = useMemo(
     () =>
-      KPI_LIBRARY.filter(
+      kpiLibrary.filter(
         (k) =>
           !kpiSearch ||
           k.name.toLowerCase().includes(kpiSearch.toLowerCase()) ||
           k.description.toLowerCase().includes(kpiSearch.toLowerCase()),
       ),
-    [kpiSearch],
+    [kpiSearch, kpiLibrary],
   )
 
   const incentivePlaceholder = useMemo(() => {
     if (slab.selectedKPIs.length === 0) return 'e.g., total_premium_by_sales_personnel * 0.05'
-    const firstName = KPI_LIBRARY.find((k) => k.id === slab.selectedKPIs[0].kpiId)?.name ?? ''
+    const firstName = kpiLibrary.find((k) => k.id === slab.selectedKPIs[0].kpiId)?.name ?? ''
     return `e.g., ${toVarName(firstName)} * 0.05`
-  }, [slab.selectedKPIs])
+  }, [slab.selectedKPIs, kpiLibrary])
 
   const kpiFields = useMemo(
       () =>
-        KPI_LIBRARY.map((kpi) => ({
+        kpiLibrary.map((kpi) => ({
           name: toVarName(kpi.name),
           label: kpi.name,
           description: kpi.description,
         })),
-      [],
+      [kpiLibrary],
     )
 
   const isKPISelected = (id: string) => slab.selectedKPIs.some((s) => s.kpiId === id)
@@ -974,6 +922,70 @@ const IncentiveProgramConfig = () => {
     designations: [],
   })
 
+  // ─── API state ───────────────────────────────────────────────────────────────
+  const [kpiLibrary, setKpiLibrary] = useState<KPIEntry[]>(KPI_LIBRARY_PLACEHOLDER)
+  const [pastPrograms, setPastPrograms] = useState<IIncentiveProgram[]>([])
+  const [apiDesignations, setApiDesignations] = useState<Record<string, string[]>>({})
+  const [designationsLoading, setDesignationsLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Load KPI library from API
+  useEffect(() => {
+    incentiveService.getKpiLibrary({ pageNumber: 1, pageSize: 200 })
+      .then((result) => setKpiLibrary(result?.items ?? []))
+      .catch((err) => console.error('Failed to load KPI library:', err))
+  }, [])
+
+  // Load past programs from API
+  useEffect(() => {
+    incentiveService.getPrograms({ pageNumber: 1, pageSize: 100 })
+      .then((result) => setPastPrograms(result?.items ?? []))
+      .catch((err) => console.error('Failed to load programs:', err))
+  }, [])
+
+  // Fetch designations from API when branches change
+  const fetchDesignations = useCallback(async (branches: string[]) => {
+    if (branches.length === 0) return
+    setDesignationsLoading(true)
+    try {
+      const result = await incentiveService.getFilters({ branchIds: branches })
+      const map: Record<string, string[]> = {}
+      ;(result ?? []).forEach((item) => {
+        map[item.branchId] = item.designations.map((d) => d.name)
+        if (item.branchName) {
+          map[item.branchName] = item.designations.map((d) => d.name)
+        }
+      })
+      setApiDesignations(map)
+    } catch (err) {
+      console.error('Failed to load designations from API:', err)
+    } finally {
+      setDesignationsLoading(false)
+    }
+  }, [])
+
+  // Re-fetch designations whenever selected branches change
+  useEffect(() => {
+    if (agentFilter.branches.length > 0) {
+      fetchDesignations(agentFilter.branches)
+    }
+  }, [agentFilter.branches, fetchDesignations])
+
+  // Derive past cycles list from loaded programs
+  const pastCycles: PastCycle[] = useMemo(
+    () =>
+      pastPrograms
+        .filter((p) => p.status?.toLowerCase() === 'completed' || new Date(p.endDate) < new Date())
+        .map((p) => ({
+          date: p.endDate,
+          name: p.name,
+          executionDate: p.createdAt ?? p.endDate,
+        })),
+    [pastPrograms],
+  )
+
   const updateSlab = (id: string, updates: Partial<SlabState>) => {
     setSlabs((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
   }
@@ -1002,6 +1014,41 @@ const IncentiveProgramConfig = () => {
     return s.selectedKPIs.length > 0
   })
 
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      // Map each slab to a separate program creation request
+      for (const s of slabs) {
+        const filters = agentFilter.branches.length > 0
+          ? agentFilter.branches.map((branchId) => ({
+              branchId,
+              designationIds: agentFilter.designations,
+            }))
+          : []
+        await incentiveService.createProgram({
+          name: s.programName,
+          description: s.programDescription,
+          startDate: s.startDate,
+          endDate: s.endDate,
+          filters,
+          kpiWeightages: s.selectedKPIs.map((k) => ({ kpiId: k.kpiId, weight: k.weight })),
+        })
+      }
+      setSaveSuccess(true)
+      // Reload programs list
+      incentiveService.getPrograms({ pageNumber: 1, pageSize: 100 })
+        .then((result) => setPastPrograms(result?.items ?? []))
+        .catch(() => {})
+    } catch (err) {
+      console.error('Failed to save program:', err)
+      setSaveError('Failed to save. Please check your inputs and try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="min-h-screen py-2">
       <div className="max-w-full space-y-5 p-2">
@@ -1016,35 +1063,36 @@ const IncentiveProgramConfig = () => {
           <Button
             variant="green"
             size="sm"
-            disabled={!isAllValid}
+            disabled={!isAllValid || saving}
             icon={<FiCheck className="h-4 w-4" />}
-            onClick={() => {
-              // TODO: POST /api/programs — wire up when backend endpoint is available
-              const payload = {
-                agentFilter,
-                slabs: slabs.map((s) => ({
-                  name: s.programName,
-                  description: s.programDescription,
-                  startDate: s.startDate,
-                  endDate: s.endDate,
-                  selectedKPIs: s.selectedKPIs,
-                  criteriaTab: s.criteriaTab,
-                  selectionExpression: s.selectionExpression,
-                  incentiveExpression: s.incentiveExpression,
-                })),
-              }
-              console.info('Save Programs:', JSON.stringify(payload, null, 2))
-            }}
+            onClick={handleSave}
           >
-            Save All Slabs
+            {saving ? 'Saving…' : 'Save All Slabs'}
           </Button>
         </div>
 
+        {/* Status messages */}
+        {saveError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+            {saveError}
+          </div>
+        )}
+        {saveSuccess && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            Program saved successfully!
+          </div>
+        )}
+
         {/* 1. Agent Filter */}
-        <AgentFilter filter={agentFilter} onChange={(updates) => setAgentFilter((prev) => ({ ...prev, ...updates }))} />
+        <AgentFilter
+          filter={agentFilter}
+          onChange={(updates) => setAgentFilter((prev) => ({ ...prev, ...updates }))}
+          apiDesignations={apiDesignations}
+          designationsLoading={designationsLoading}
+        />
 
         {/* 2. Past Qualified Cycles */}
-        <PastQualifiedCycles cycles={PAST_QUALIFIED_CYCLES} />
+        <PastQualifiedCycles cycles={pastCycles} />
 
         {/* 3. Slab Configuration — Left-Right Panel Layout */}
         <Card className="rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
@@ -1108,6 +1156,7 @@ const IncentiveProgramConfig = () => {
                   canRemove={slabs.length > 1}
                   onChange={(updates) => updateSlab(activeSlab.id, updates)}
                   onRemove={() => removeSlab(activeSlab.id)}
+                  kpiLibrary={kpiLibrary}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center p-10 text-center">

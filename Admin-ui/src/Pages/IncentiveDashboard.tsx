@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from '@tanstack/react-router'
 import { FiBookOpen, FiDownload, FiExternalLink, FiPlus, FiSearch, FiSettings, FiUpload, FiUserPlus } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { incentiveService } from '@/services/incentiveService'
+import type { IIncentiveProgram } from '@/models/incentive'
 
 const statCards = [
   { title: 'Active Plans', value: '12', delta: '+3 this month' },
@@ -111,6 +113,35 @@ const goToItems = [
 
 const IncentiveDashboard = () => {
   const [resourceSearch, setResourceSearch] = useState('')
+  const [programs, setPrograms] = useState<IIncentiveProgram[]>([])
+  const [programsLoading, setProgramsLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      setProgramsLoading(true)
+      try {
+        const result = await incentiveService.getPrograms({ pageNumber: 1, pageSize: 100 })
+        setPrograms(result?.items ?? [])
+      } catch (err) {
+        console.error('Failed to load programs:', err)
+      } finally {
+        setProgramsLoading(false)
+      }
+    }
+    fetchPrograms()
+  }, [])
+
+  const activePlansCount = programs.filter((p) => p.status?.toLowerCase() === 'active').length
+  const dynamicStatCards = [
+    {
+      title: 'Active Plans',
+      value: programsLoading ? '…' : String(activePlansCount),
+      delta: `${programs.length} total programs`,
+    },
+    { title: 'Total Agents', value: '248', delta: '+18 this month' },
+    { title: 'Pending Payouts', value: '₹4.2L', delta: '-2 this month' },
+    { title: 'Avg Achievement', value: '78%', delta: '+5% this month' },
+  ]
 
   const filteredResources = useMemo(
     () =>
@@ -128,7 +159,7 @@ const IncentiveDashboard = () => {
             {/* <h1 className="text-3xl font-bold text-neutral-900">Dashboard</h1> */}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {statCards.map((card) => (
+              {dynamicStatCards.map((card) => (
                 <Card key={card.title} className="gap-2 rounded-lg border border-neutral-200 py-4 shadow-sm">
                   <CardContent className="px-4">
                     <p className="text-sm text-neutral-500">{card.title}</p>

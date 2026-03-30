@@ -68,6 +68,10 @@ const APIRoutes = {
   SAVECUSTOMFIELD: "/api/CustomFields/Save",
   GETCUSTOMFIELDS: "/api/CustomFields/Fetch",
 
+  // Incentive APIs
+  INCENTIVE_KPI_LIBRARY: "/api/incentive/kpi-library",
+  INCENTIVE_FILTERS: "/api/incentive/filters",
+  INCENTIVE_PROGRAMS: "/api/incentive/programs",
 };
 
 module.exports = { APIRoutes };
