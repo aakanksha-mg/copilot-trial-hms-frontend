@@ -1,83 +1,42 @@
-import { useState } from 'react'
-import { FiEdit2, FiPlus, FiToggleLeft, FiToggleRight, FiTrash2 } from 'react-icons/fi'
+import { useState, useEffect, useCallback } from 'react'
+import { FiEdit2, FiPlus, FiRefreshCw, FiTrash2 } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { incentiveService } from '@/services/incentiveService'
+import type { IIncentiveProgram, IProductWeightageItem } from '@/models/incentive'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface WeightageRecord {
+interface WeightageRecord extends IProductWeightageItem {
   id: string
-  weightageName: string
-  productCode: string
-  createdBy: string
-  isActive: boolean
-  createdAt: string
 }
-
-// ─── Initial Mock Data ────────────────────────────────────────────────────────
-
-const MOCK_WEIGHTAGES: WeightageRecord[] = [
-  {
-    id: '1',
-    weightageName: 'Term Life Standard',
-    productCode: 'TL-001',
-    createdBy: 'Manish Kumar',
-    isActive: true,
-    createdAt: '2024-11-10',
-  },
-  {
-    id: '2',
-    weightageName: 'Endowment Premium',
-    productCode: 'EP-002',
-    createdBy: 'Aakanksha M',
-    isActive: true,
-    createdAt: '2024-10-25',
-  },
-  {
-    id: '3',
-    weightageName: 'ULIP Growth',
-    productCode: 'UL-003',
-    createdBy: 'Rajan Singh',
-    isActive: false,
-    createdAt: '2024-09-15',
-  },
-  {
-    id: '4',
-    weightageName: 'Critical Illness Add-On',
-    productCode: 'CI-004',
-    createdBy: 'Priya Nair',
-    isActive: true,
-    createdAt: '2024-08-30',
-  },
-]
 
 // ─── Modal Form Component ─────────────────────────────────────────────────────
 
 interface WeightageFormProps {
-  initial: Omit<WeightageRecord, 'id' | 'createdAt'> | null
-  onSave: (data: Omit<WeightageRecord, 'id' | 'createdAt'>) => void
+  initial: Omit<WeightageRecord, 'id'> | null
+  onSave: (data: Omit<WeightageRecord, 'id'>) => void
   onCancel: () => void
   isEdit: boolean
 }
 
 const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps) => {
   const [form, setForm] = useState({
-    weightageName: initial?.weightageName ?? '',
+    productName: initial?.productName ?? '',
     productCode: initial?.productCode ?? '',
-    createdBy: initial?.createdBy ?? '',
-    isActive: initial?.isActive ?? true,
+    weight: initial?.weight ?? 0,
   })
-  const [errors, setErrors] = useState<Partial<typeof form>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({})
 
   const validate = () => {
-    const errs: Partial<typeof form> = {}
-    if (!form.weightageName.trim()) errs.weightageName = 'Weightage Name is required'
+    const errs: Partial<Record<keyof typeof form, string>> = {}
+    if (!form.productName.trim()) errs.productName = 'Product Name is required'
     if (!form.productCode.trim()) errs.productCode = 'Product Code is required'
-    if (!form.createdBy.trim()) errs.createdBy = 'Created By is required'
+    if (form.weight <= 0 || form.weight > 100) errs.weight = 'Weight must be between 1 and 100'
     return errs
   }
 
@@ -109,20 +68,20 @@ const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps
         <div className="space-y-4 px-5 py-5">
           <div>
             <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
-              Weightage Name <span className="text-red-500">*</span>
+              Product Name <span className="text-red-500">*</span>
             </Label>
             <Input
               label=""
               variant="outlined"
-              placeholder="e.g., Term Life Standard"
-              value={form.weightageName}
+              placeholder="e.g., Term Life"
+              value={form.productName}
               onChange={(e) => {
-                setForm((f) => ({ ...f, weightageName: e.target.value }))
-                setErrors((err) => ({ ...err, weightageName: undefined }))
+                setForm((f) => ({ ...f, productName: e.target.value }))
+                setErrors((err) => ({ ...err, productName: undefined }))
               }}
             />
-            {errors.weightageName && (
-              <p className="mt-1 text-xs text-red-500">{errors.weightageName}</p>
+            {errors.productName && (
+              <p className="mt-1 text-xs text-red-500">{errors.productName}</p>
             )}
           </div>
 
@@ -147,41 +106,24 @@ const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps
 
           <div>
             <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
-              Created By <span className="text-red-500">*</span>
+              Weight (%) <span className="text-red-500">*</span>
             </Label>
             <Input
               label=""
               variant="outlined"
-              placeholder="e.g., John Smith"
-              value={form.createdBy}
+              type="number"
+              min={1}
+              max={100}
+              placeholder="e.g., 40"
+              value={form.weight === 0 ? '' : String(form.weight)}
               onChange={(e) => {
-                setForm((f) => ({ ...f, createdBy: e.target.value }))
-                setErrors((err) => ({ ...err, createdBy: undefined }))
+                setForm((f) => ({ ...f, weight: Number(e.target.value) }))
+                setErrors((err) => ({ ...err, weight: undefined }))
               }}
             />
-            {errors.createdBy && (
-              <p className="mt-1 text-xs text-red-500">{errors.createdBy}</p>
+            {errors.weight && (
+              <p className="mt-1 text-xs text-red-500">{errors.weight}</p>
             )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Label className="text-xs font-semibold text-neutral-600">Status</Label>
-            <button
-              type="button"
-              onClick={() => setForm((f) => ({ ...f, isActive: !f.isActive }))}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-                form.isActive
-                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                  : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'
-              }`}
-            >
-              {form.isActive ? (
-                <FiToggleRight className="h-3.5 w-3.5" />
-              ) : (
-                <FiToggleLeft className="h-3.5 w-3.5" />
-              )}
-              {form.isActive ? 'Active' : 'Inactive'}
-            </button>
           </div>
         </div>
 
@@ -235,44 +177,103 @@ const DeleteConfirm = ({ name, onConfirm, onCancel }: DeleteConfirmProps) => (
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const ProductWeightage = () => {
-  const [records, setRecords] = useState<WeightageRecord[]>(MOCK_WEIGHTAGES)
+  const [programs, setPrograms] = useState<IIncentiveProgram[]>([])
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('')
+  const [records, setRecords] = useState<WeightageRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editRecord, setEditRecord] = useState<WeightageRecord | null>(null)
   const [deleteRecord, setDeleteRecord] = useState<WeightageRecord | null>(null)
 
-  const handleAdd = (data: Omit<WeightageRecord, 'id' | 'createdAt'>) => {
-    const newRecord: WeightageRecord = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString().split('T')[0],
+  // Load programs list on mount
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        const result = await incentiveService.getPrograms({ pageNumber: 1, pageSize: 100 })
+        const items = result?.items ?? []
+        setPrograms(items)
+        if (items.length > 0) {
+          setSelectedProgramId(items[0].id)
+        }
+      } catch (err) {
+        console.error('Failed to load programs:', err)
+      }
     }
-    setRecords((prev) => [newRecord, ...prev])
+    fetchPrograms()
+  }, [])
+
+  // Load weightages when selected program changes
+  const fetchWeightages = useCallback(async (programId: string) => {
+    if (!programId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await incentiveService.getProductWeightage(programId)
+      const items = (result?.weightages ?? []).map((w, idx) => ({
+        ...w,
+        id: String(idx + 1),
+      }))
+      setRecords(items)
+    } catch (err) {
+      console.error('Failed to load product weightages:', err)
+      setError('Failed to load product weightages. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedProgramId) {
+      fetchWeightages(selectedProgramId)
+    }
+  }, [selectedProgramId, fetchWeightages])
+
+  const totalWeight = records.reduce((sum, r) => sum + r.weight, 0)
+
+  const persistWeightages = async (updatedRecords: WeightageRecord[]) => {
+    if (!selectedProgramId) return
+    setSaving(true)
+    try {
+      await incentiveService.saveProductWeightage({
+        id: selectedProgramId,
+        weightages: updatedRecords.map(({ productCode, productName, weight }) => ({
+          productCode,
+          productName,
+          weight,
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to save product weightages:', err)
+      setError('Failed to save. Please ensure the total weight equals 100%.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAdd = async (data: Omit<WeightageRecord, 'id'>) => {
+    const newRecord: WeightageRecord = { ...data, id: crypto.randomUUID() }
+    const updated = [newRecord, ...records]
+    setRecords(updated)
     setShowForm(false)
+    await persistWeightages(updated)
   }
 
-  const handleEdit = (data: Omit<WeightageRecord, 'id' | 'createdAt'>) => {
+  const handleEdit = async (data: Omit<WeightageRecord, 'id'>) => {
     if (!editRecord) return
-    setRecords((prev) =>
-      prev.map((r) => (r.id === editRecord.id ? { ...r, ...data } : r)),
-    )
+    const updated = records.map((r) => (r.id === editRecord.id ? { ...r, ...data } : r))
+    setRecords(updated)
     setEditRecord(null)
+    await persistWeightages(updated)
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteRecord) return
-    setRecords((prev) => prev.filter((r) => r.id !== deleteRecord.id))
+    const updated = records.filter((r) => r.id !== deleteRecord.id)
+    setRecords(updated)
     setDeleteRecord(null)
-  }
-
-  const toggleActive = (id: string) => {
-    setRecords((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r)),
-    )
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    await persistWeightages(updated)
   }
 
   return (
@@ -291,29 +292,80 @@ const ProductWeightage = () => {
             size="sm"
             icon={<FiPlus className="h-4 w-4" />}
             onClick={() => setShowForm(true)}
+            disabled={!selectedProgramId}
           >
             Add Weightage
           </Button>
         </div>
+
+        {/* Program Selector */}
+        {programs.length > 0 && (
+          <div className="flex items-center gap-3">
+            <Label className="text-sm font-semibold text-neutral-600 shrink-0">Program:</Label>
+            <select
+              className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              value={selectedProgramId}
+              onChange={(e) => setSelectedProgramId(e.target.value)}
+            >
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => fetchWeightages(selectedProgramId)}
+              className="rounded p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 transition"
+              title="Refresh"
+            >
+              <FiRefreshCw className="h-4 w-4" />
+            </button>
+            {totalWeight > 0 && (
+              <Badge
+                className={`text-xs ${
+                  totalWeight === 100
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : 'bg-amber-100 text-amber-700 border border-amber-200'
+                }`}
+              >
+                Total: {totalWeight}%{totalWeight !== 100 && ' (must equal 100%)'}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            {error}
+          </div>
+        )}
 
         {/* Table */}
         <Card className="rounded-xl border border-neutral-200 shadow-sm">
           <CardHeader className="px-5 pb-2 pt-5">
             <CardTitle className="text-base">Weightage Records</CardTitle>
             <p className="mt-0.5 text-xs text-neutral-500">
-              {records.length} record{records.length !== 1 ? 's' : ''} total &nbsp;·&nbsp;{' '}
-              {records.filter((r) => r.isActive).length} active
+              {records.length} record{records.length !== 1 ? 's' : ''} total
+              {saving && ' · Saving…'}
             </p>
           </CardHeader>
           <CardContent className="px-5 pb-5">
-            {records.length === 0 ? (
+            {loading ? (
+              <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
+                <p className="text-sm text-neutral-400">Loading weightages…</p>
+              </div>
+            ) : records.length === 0 ? (
               <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
                   <FiPlus className="h-6 w-6 text-neutral-400" />
                 </div>
                 <p className="text-sm font-medium text-neutral-500">No weightage records</p>
                 <p className="mt-1 text-xs text-neutral-400">
-                  Click "Add Weightage" to create your first record.
+                  {selectedProgramId
+                    ? 'Click "Add Weightage" to create your first record.'
+                    : 'Select a program first.'}
                 </p>
               </div>
             ) : (
@@ -322,19 +374,13 @@ const ProductWeightage = () => {
                   <thead>
                     <tr className="border-b border-neutral-200 bg-neutral-50">
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Weightage Name
+                        Product Name
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
                         Product Code
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Created By
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Created On
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Status
+                        Weight (%)
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
                         Actions
@@ -350,52 +396,18 @@ const ProductWeightage = () => {
                         }`}
                       >
                         <td className="px-4 py-3 font-medium text-neutral-800">
-                          {record.weightageName}
+                          {record.productName}
                         </td>
                         <td className="px-4 py-3">
                           <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono text-xs">
                             {record.productCode}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-neutral-600">{record.createdBy}</td>
-                        <td className="px-4 py-3 text-neutral-500 text-xs">
-                          {formatDate(record.createdAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge
-                            className={`text-xs ${
-                              record.isActive
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
-                            }`}
-                          >
-                            {record.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
+                        <td className="px-4 py-3 text-neutral-700 font-semibold">
+                          {record.weight}%
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            {/* Activate / Deactivate */}
-                            <button
-                              type="button"
-                              title={record.isActive ? 'Deactivate' : 'Activate'}
-                              onClick={() => toggleActive(record.id)}
-                              className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition ${
-                                record.isActive
-                                  ? 'text-amber-600 hover:bg-amber-50'
-                                  : 'text-green-600 hover:bg-green-50'
-                              }`}
-                            >
-                              {record.isActive ? (
-                                <FiToggleRight className="h-4 w-4" />
-                              ) : (
-                                <FiToggleLeft className="h-4 w-4" />
-                              )}
-                              <span className="hidden sm:inline">
-                                {record.isActive ? 'Deactivate' : 'Activate'}
-                              </span>
-                            </button>
-
-                            {/* Edit */}
                             <button
                               type="button"
                               title="Edit"
@@ -405,8 +417,6 @@ const ProductWeightage = () => {
                               <FiEdit2 className="h-3.5 w-3.5" />
                               <span className="hidden sm:inline">Edit</span>
                             </button>
-
-                            {/* Delete */}
                             <button
                               type="button"
                               title="Delete"
@@ -442,10 +452,9 @@ const ProductWeightage = () => {
       {editRecord && (
         <WeightageForm
           initial={{
-            weightageName: editRecord.weightageName,
+            productName: editRecord.productName,
             productCode: editRecord.productCode,
-            createdBy: editRecord.createdBy,
-            isActive: editRecord.isActive,
+            weight: editRecord.weight,
           }}
           onSave={handleEdit}
           onCancel={() => setEditRecord(null)}
@@ -456,7 +465,7 @@ const ProductWeightage = () => {
       {/* Delete Confirmation */}
       {deleteRecord && (
         <DeleteConfirm
-          name={deleteRecord.weightageName}
+          name={deleteRecord.productName}
           onConfirm={handleDelete}
           onCancel={() => setDeleteRecord(null)}
         />

@@ -1,101 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
+import { incentiveService } from '@/services/incentiveService'
+import type { IKpi } from '@/models/incentive'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface SavedKPI {
-  id: string
-  name: string
-  description: string
-  dataSources: Array<{
-    object: string
-    aggregation: string
-    field: string
-  }>
-  groupBy: string[]
-  timeWindow: string
-  createdAt: string
-  createdBy: string
-}
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_KPIS: SavedKPI[] = [
-  {
-    id: 'kpi-001',
-    name: 'Total Premium by Sales Personnel',
-    description: 'Sums up the annualized premium across all active policies per sales agent.',
-    dataSources: [{ object: 'Policy', aggregation: 'SUM', field: 'Annualized Premium' }],
-    groupBy: ['sales_personnel_id'],
-    timeWindow: 'PROGRAM_DURATION',
-    createdAt: '2024-11-01',
-    createdBy: 'Rahul Sharma',
-  },
-  {
-    id: 'kpi-002',
-    name: 'Unique Policies Sold',
-    description: 'Counts distinct policy IDs issued by a sales agent within the program period.',
-    dataSources: [{ object: 'Policy', aggregation: 'DISTINCT_COUNT', field: 'Policy ID' }],
-    groupBy: ['sales_personnel_id', 'region'],
-    timeWindow: 'PROGRAM_DURATION',
-    createdAt: '2024-11-05',
-    createdBy: 'Priya Patel',
-  },
-  {
-    id: 'kpi-003',
-    name: 'Training Completion Rate',
-    description: 'Average training completion percentage across all mandatory training modules.',
-    dataSources: [{ object: 'Training', aggregation: 'AVG', field: 'Completion %' }],
-    groupBy: ['sales_personnel_id'],
-    timeWindow: 'ROLLING_WINDOW',
-    createdAt: '2024-11-10',
-    createdBy: 'Amit Kumar',
-  },
-  {
-    id: 'kpi-004',
-    name: 'Premium + Training Score (Composite)',
-    description:
-      'Composite KPI combining total premium collected and average training score for holistic performance evaluation.',
-    dataSources: [
-      { object: 'Policy', aggregation: 'SUM', field: 'Premium Amount' },
-      { object: 'Training', aggregation: 'AVG', field: 'Training Score' },
-    ],
-    groupBy: ['sales_personnel_id', 'team'],
-    timeWindow: 'PROGRAM_DURATION',
-    createdAt: '2024-11-15',
-    createdBy: 'Sneha Reddy',
-  },
-  {
-    id: 'kpi-005',
-    name: 'Lead Conversion Count',
-    description: 'Total number of leads converted to policies by the sales agent.',
-    dataSources: [{ object: 'Sales Activity', aggregation: 'SUM', field: 'Conversion Count' }],
-    groupBy: ['sales_personnel_id'],
-    timeWindow: 'CUSTOM_RANGE',
-    createdAt: '2024-11-20',
-    createdBy: 'Vijay Singh',
-  },
-  {
-    id: 'kpi-006',
-    name: 'Multi-Source Eligibility KPI',
-    description:
-      'Determines eligibility based on policy premium, training completion, and sales meeting count together.',
-    dataSources: [
-      { object: 'Policy', aggregation: 'SUM', field: 'Annualized Premium' },
-      { object: 'Training', aggregation: 'AVG', field: 'Completion %' },
-      { object: 'Sales Activity', aggregation: 'COUNT', field: 'Meeting Count' },
-    ],
-    groupBy: ['sales_personnel_id', 'region'],
-    timeWindow: 'PROGRAM_DURATION',
-    createdAt: '2024-11-25',
-    createdBy: 'Rahul Sharma',
-  },
-]
+type SavedKPI = IKpi
 
 // ─── Object color mapping ─────────────────────────────────────────────────────
 
@@ -200,9 +115,33 @@ function KPICard({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const IncentiveKPILibrary = () => {
-  const [kpis, setKpis] = useState<SavedKPI[]>(MOCK_KPIS)
+  const [kpis, setKpis] = useState<SavedKPI[]>([])
   const [search, setSearch] = useState('')
   const [objectFilter, setObjectFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchKpis = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await incentiveService.getKpiLibrary({
+        search: search || undefined,
+        pageNumber: 1,
+        pageSize: 100,
+      })
+      setKpis(result?.items ?? [])
+    } catch (err) {
+      console.error('Failed to fetch KPIs:', err)
+      setError('Failed to load KPIs. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [search])
+
+  useEffect(() => {
+    fetchKpis()
+  }, [fetchKpis])
 
   const filteredKpis = useMemo(() => {
     return kpis.filter((kpi) => {
@@ -217,8 +156,13 @@ const IncentiveKPILibrary = () => {
     })
   }, [kpis, search, objectFilter])
 
-  const handleDelete = (id: string) => {
-    setKpis((prev) => prev.filter((k) => k.id !== id))
+  const handleDelete = async (id: string) => {
+    try {
+      await incentiveService.deleteKpi(id)
+      setKpis((prev) => prev.filter((k) => k.id !== id))
+    } catch (err) {
+      console.error('Failed to delete KPI:', err)
+    }
   }
 
   return (
@@ -304,8 +248,19 @@ const IncentiveKPILibrary = () => {
           </div>
         </div>
 
+        {/* Error */}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
         {/* KPI Grid */}
-        {filteredKpis.length === 0 ? (
+        {loading ? (
+          <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
+            <p className="text-sm text-neutral-400">Loading KPIs…</p>
+          </div>
+        ) : filteredKpis.length === 0 ? (
           <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
             <p className="text-sm text-neutral-400">No KPIs match your search.</p>
           </div>

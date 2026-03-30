@@ -583,6 +583,67 @@ const getCustomFields = async (data = {}, headers = {}) => {
   return apiClient.post(APIRoutes.GETCUSTOMFIELDS, data, { headers });
 };
 
+// ─── Incentive: KPI Library ────────────────────────────────────────────────────
+
+const getIncentiveKpiLibrary = async (data = {}, headers = {}) => {
+  return apiClient.get(APIRoutes.INCENTIVE_KPI_LIBRARY, { params: data, headers });
+};
+
+const getIncentiveKpiById = async (data = {}, headers = {}) => {
+  const { id } = data;
+  return apiClient.get(`${APIRoutes.INCENTIVE_KPI_LIBRARY}/${id}`, { headers });
+};
+
+const createIncentiveKpi = async (data = {}, headers = {}) => {
+  return apiClient.post(APIRoutes.INCENTIVE_KPI_LIBRARY, data, { headers });
+};
+
+const updateIncentiveKpi = async (data = {}, headers = {}) => {
+  const { id, ...body } = data;
+  return apiClient.put(`${APIRoutes.INCENTIVE_KPI_LIBRARY}/${id}`, body, { headers });
+};
+
+const deleteIncentiveKpi = async (data = {}, headers = {}) => {
+  const { id } = data;
+  return apiClient.delete(`${APIRoutes.INCENTIVE_KPI_LIBRARY}/${id}`, { headers });
+};
+
+// ─── Incentive: Filters ────────────────────────────────────────────────────────
+
+const getIncentiveFilters = async (data = {}, headers = {}) => {
+  return apiClient.get(APIRoutes.INCENTIVE_FILTERS, { params: data, headers });
+};
+
+// ─── Incentive: Programs ──────────────────────────────────────────────────────
+
+const getIncentivePrograms = async (data = {}, headers = {}) => {
+  return apiClient.get(APIRoutes.INCENTIVE_PROGRAMS, { params: data, headers });
+};
+
+const getIncentiveProgramById = async (data = {}, headers = {}) => {
+  const { id } = data;
+  return apiClient.get(`${APIRoutes.INCENTIVE_PROGRAMS}/${id}`, { headers });
+};
+
+const createIncentiveProgram = async (data = {}, headers = {}) => {
+  return apiClient.post(APIRoutes.INCENTIVE_PROGRAMS, data, { headers });
+};
+
+const updateIncentiveProgram = async (data = {}, headers = {}) => {
+  const { id, ...body } = data;
+  return apiClient.put(`${APIRoutes.INCENTIVE_PROGRAMS}/${id}`, body, { headers });
+};
+
+const getIncentiveProgramProductWeightage = async (data = {}, headers = {}) => {
+  const { id } = data;
+  return apiClient.get(`${APIRoutes.INCENTIVE_PROGRAMS}/${id}/product-weightage`, { headers });
+};
+
+const saveIncentiveProgramProductWeightage = async (data = {}, headers = {}) => {
+  const { id, ...body } = data;
+  return apiClient.post(`${APIRoutes.INCENTIVE_PROGRAMS}/${id}/product-weightage`, body, { headers });
+};
+
 module.exports = {
   login,
   search,
@@ -663,4 +724,16 @@ module.exports = {
   fetchBranchByUser,
   saveCustomField,
   getCustomFields,
+  getIncentiveKpiLibrary,
+  getIncentiveKpiById,
+  createIncentiveKpi,
+  updateIncentiveKpi,
+  deleteIncentiveKpi,
+  getIncentiveFilters,
+  getIncentivePrograms,
+  getIncentiveProgramById,
+  createIncentiveProgram,
+  updateIncentiveProgram,
+  getIncentiveProgramProductWeightage,
+  saveIncentiveProgramProductWeightage,
 };
