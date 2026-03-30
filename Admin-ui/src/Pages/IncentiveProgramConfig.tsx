@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { FiCheck, FiCode, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
+import { FiCheck, FiChevronRight, FiCode, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,20 @@ interface SlabState {
   criteriaTab: 'selected-kpi' | 'expression'
   selectionExpression: string
   incentiveExpression: string
+}
+
+// ─── Agent Filter Types ───────────────────────────────────────────────────────
+
+interface AgentFilterState {
+  channel: string
+  subChannel: string
+  branches: string[]
+  designations: string[]
+}
+
+interface PastCycle {
+  date: string
+  name: string
 }
 
 // ─── Shared KPI Library (program-agnostic) ────────────────────────────────────
@@ -104,10 +118,361 @@ const TIME_WINDOW_LABELS: Record<string, string> = {
   ROLLING_WINDOW: 'Rolling Window',
 }
 
+// ─── Agent Filter Mock Data ───────────────────────────────────────────────────
+
+const CHANNELS = ['Bancassurance', 'Agency', 'Direct', 'Broker']
+
+const SUB_CHANNELS: Record<string, string[]> = {
+  Bancassurance: ['Retail Banking', 'Private Banking', 'Corporate Banking'],
+  Agency: ['Individual Agent', 'Corporate Agent', 'Web Aggregator'],
+  Direct: ['Online Direct', 'Telemarketing', 'Worksite'],
+  Broker: ['Composite Broker', 'Direct Broker', 'Reinsurance Broker'],
+}
+
+const BRANCHES_BY_SUBCHANNEL: Record<string, string[]> = {
+  'Retail Banking': ['Mumbai Central', 'Delhi Connaught', 'Bangalore MG Road', 'Chennai Anna Nagar'],
+  'Private Banking': ['Mumbai Nariman', 'Delhi Golf Links', 'Hyderabad Banjara Hills'],
+  'Corporate Banking': ['Mumbai BKC', 'Gurgaon Cyber City', 'Pune Magarpatta'],
+  'Individual Agent': ['Ahmedabad CG Road', 'Pune FC Road', 'Kolkata Park Street', 'Jaipur MI Road'],
+  'Corporate Agent': ['Noida Sector 62', 'Chennai OMR', 'Bangalore Whitefield'],
+  'Web Aggregator': ['Mumbai HQ', 'Delhi HQ', 'Bangalore HQ'],
+  'Online Direct': ['Pan India'],
+  Telemarketing: ['Mumbai Call Center', 'Pune Call Center', 'Noida Call Center'],
+  Worksite: ['Mumbai Industrial', 'Pune Industrial', 'Faridabad Industrial'],
+  'Composite Broker': ['Mumbai Fort', 'Delhi Barakhamba', 'Hyderabad Begumpet'],
+  'Direct Broker': ['Chennai Nungambakkam', 'Kolkata Camac Street'],
+  'Reinsurance Broker': ['Mumbai Nariman Point'],
+}
+
+const DESIGNATIONS_BY_BRANCH: Record<string, string[]> = {
+  'Mumbai Central': ['Sales Manager', 'Senior Agent', 'Junior Agent', 'Team Leader'],
+  'Delhi Connaught': ['Sales Manager', 'Senior Agent', 'Business Development Executive'],
+  'Bangalore MG Road': ['Regional Manager', 'Sales Manager', 'Senior Agent'],
+  'Chennai Anna Nagar': ['Sales Manager', 'Junior Agent', 'Team Leader'],
+  'Mumbai Nariman': ['Relationship Manager', 'Senior Advisor', 'Team Leader'],
+  'Delhi Golf Links': ['Relationship Manager', 'Senior Advisor'],
+  'Hyderabad Banjara Hills': ['Branch Manager', 'Relationship Manager', 'Senior Advisor'],
+  'Mumbai BKC': ['Corporate Sales Manager', 'Key Account Manager', 'Business Analyst'],
+  'Gurgaon Cyber City': ['Corporate Sales Manager', 'Key Account Manager'],
+  'Pune Magarpatta': ['Branch Manager', 'Corporate Sales Manager'],
+  'Ahmedabad CG Road': ['Sales Manager', 'Senior Agent', 'Junior Agent'],
+  'Pune FC Road': ['Sales Manager', 'Senior Agent', 'Team Leader'],
+  'Kolkata Park Street': ['Regional Manager', 'Sales Manager', 'Senior Agent'],
+  'Jaipur MI Road': ['Sales Manager', 'Junior Agent'],
+  'Noida Sector 62': ['Corporate Agent Manager', 'Relationship Manager'],
+  'Chennai OMR': ['Corporate Agent Manager', 'Business Development Executive'],
+  'Bangalore Whitefield': ['Corporate Agent Manager', 'Key Account Manager'],
+  'Mumbai HQ': ['Operations Manager', 'Sales Lead', 'Technology Lead'],
+  'Delhi HQ': ['Operations Manager', 'Sales Lead'],
+  'Bangalore HQ': ['Operations Manager', 'Technology Lead'],
+  'Pan India': ['National Sales Head', 'Regional Head', 'Zone Manager'],
+  'Mumbai Call Center': ['Call Center Manager', 'Senior Executive', 'Executive'],
+  'Pune Call Center': ['Call Center Manager', 'Executive'],
+  'Noida Call Center': ['Call Center Manager', 'Senior Executive'],
+  'Mumbai Industrial': ['Worksite Manager', 'HR Liaison', 'Sales Executive'],
+  'Pune Industrial': ['Worksite Manager', 'Sales Executive'],
+  'Faridabad Industrial': ['Worksite Manager', 'HR Liaison'],
+  'Mumbai Fort': ['Broker Manager', 'Senior Broker', 'Broker Associate'],
+  'Delhi Barakhamba': ['Broker Manager', 'Senior Broker'],
+  'Hyderabad Begumpet': ['Broker Manager', 'Broker Associate'],
+  'Chennai Nungambakkam': ['Broker Manager', 'Senior Broker'],
+  'Kolkata Camac Street': ['Broker Manager', 'Broker Associate'],
+  'Mumbai Nariman Point': ['Reinsurance Manager', 'Senior Underwriter'],
+}
+
+// ─── Past Qualified Cycles Mock Data ─────────────────────────────────────────
+
+const PAST_QUALIFIED_CYCLES: PastCycle[] = [
+  { date: '2024-12-31', name: 'Q4 2024 Performance Incentive' },
+  { date: '2024-09-30', name: 'Q3 2024 Sales Excellence Program' },
+  { date: '2024-06-30', name: 'Q2 2024 Bancassurance Boost' },
+  { date: '2024-03-31', name: 'Q1 2024 Agency Growth Drive' },
+  { date: '2023-12-31', name: 'Annual 2023 Champion Award' },
+]
+
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 const toVarName = (name: string) =>
   name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+
+// ─── Agent Filter Component ───────────────────────────────────────────────────
+
+interface AgentFilterProps {
+  filter: AgentFilterState
+  onChange: (updates: Partial<AgentFilterState>) => void
+}
+
+const AgentFilter = ({ filter, onChange }: AgentFilterProps) => {
+  const availableSubChannels = filter.channel ? (SUB_CHANNELS[filter.channel] ?? []) : []
+
+  const availableBranches = useMemo(() => {
+    if (!filter.subChannel) return []
+    return BRANCHES_BY_SUBCHANNEL[filter.subChannel] ?? []
+  }, [filter.subChannel])
+
+  const availableDesignations = useMemo(() => {
+    if (filter.branches.length === 0) return []
+    const desigSet = new Set<string>()
+    filter.branches.forEach((branch) => {
+      ;(DESIGNATIONS_BY_BRANCH[branch] ?? []).forEach((d) => desigSet.add(d))
+    })
+    return Array.from(desigSet).sort()
+  }, [filter.branches])
+
+  const handleChannelChange = (ch: string) => {
+    onChange({ channel: ch, subChannel: '', branches: [], designations: [] })
+  }
+
+  const handleSubChannelChange = (sc: string) => {
+    onChange({ subChannel: sc, branches: [], designations: [] })
+  }
+
+  const toggleBranch = (branch: string) => {
+    const next = filter.branches.includes(branch)
+      ? filter.branches.filter((b) => b !== branch)
+      : [...filter.branches, branch]
+    // Remove any designations that are no longer available after branch change
+    const newDesigSet = new Set<string>()
+    next.forEach((b) => {
+      ;(DESIGNATIONS_BY_BRANCH[b] ?? []).forEach((d) => newDesigSet.add(d))
+    })
+    onChange({
+      branches: next,
+      designations: filter.designations.filter((d) => newDesigSet.has(d)),
+    })
+  }
+
+  const toggleDesignation = (desig: string) => {
+    onChange({
+      designations: filter.designations.includes(desig)
+        ? filter.designations.filter((d) => d !== desig)
+        : [...filter.designations, desig],
+    })
+  }
+
+  return (
+    <Card className="rounded-xl border border-neutral-200 shadow-sm">
+      <CardHeader className="px-5 pb-2 pt-5">
+        <div className="flex items-center gap-2">
+          <FiFilter className="h-4 w-4 text-orange-500" />
+          <CardTitle className="text-base">Agent Filter</CardTitle>
+        </div>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          Select channel, sub-channel, branches, and designations to determine which agents
+          are eligible for this incentive program.
+        </p>
+      </CardHeader>
+      <CardContent className="px-5 pb-5">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {/* Channel */}
+          <div>
+            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
+              Channel <span className="text-red-500">*</span>
+            </Label>
+            <select
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
+              value={filter.channel}
+              onChange={(e) => handleChannelChange(e.target.value)}
+            >
+              <option value="">Select Channel</option>
+              {CHANNELS.map((ch) => (
+                <option key={ch} value={ch}>
+                  {ch}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sub Channel */}
+          <div>
+            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
+              Sub Channel <span className="text-red-500">*</span>
+            </Label>
+            <select
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+              value={filter.subChannel}
+              onChange={(e) => handleSubChannelChange(e.target.value)}
+              disabled={!filter.channel}
+            >
+              <option value="">
+                {filter.channel ? 'Select Sub Channel' : 'Select Channel first'}
+              </option>
+              {availableSubChannels.map((sc) => (
+                <option key={sc} value={sc}>
+                  {sc}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Branches */}
+          <div>
+            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
+              Branches
+              {filter.branches.length > 0 && (
+                <Badge className="ml-1.5 bg-orange-100 text-orange-700 text-xs">
+                  {filter.branches.length} selected
+                </Badge>
+              )}
+            </Label>
+            {!filter.subChannel ? (
+              <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
+                Select Sub Channel first
+              </p>
+            ) : availableBranches.length === 0 ? (
+              <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
+                No branches available
+              </p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto rounded-md border border-neutral-300 bg-white p-2 space-y-1.5">
+                {availableBranches.map((branch) => (
+                  <label key={branch} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-neutral-50">
+                    <Checkbox
+                      checked={filter.branches.includes(branch)}
+                      onCheckedChange={() => toggleBranch(branch)}
+                      className="shrink-0"
+                    />
+                    <span className="text-xs text-neutral-700">{branch}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Designations */}
+          <div>
+            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
+              Designations
+              {filter.designations.length > 0 && (
+                <Badge className="ml-1.5 bg-teal-100 text-teal-700 text-xs">
+                  {filter.designations.length} selected
+                </Badge>
+              )}
+            </Label>
+            {filter.branches.length === 0 ? (
+              <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
+                Select Branches first
+              </p>
+            ) : availableDesignations.length === 0 ? (
+              <p className="rounded-md border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400">
+                No designations available
+              </p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto rounded-md border border-neutral-300 bg-white p-2 space-y-1.5">
+                {availableDesignations.map((desig) => (
+                  <label key={desig} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-neutral-50">
+                    <Checkbox
+                      checked={filter.designations.includes(desig)}
+                      onCheckedChange={() => toggleDesignation(desig)}
+                      className="shrink-0"
+                    />
+                    <span className="text-xs text-neutral-700">{desig}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Active filter summary */}
+        {(filter.channel || filter.branches.length > 0 || filter.designations.length > 0) && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-neutral-100 pt-4">
+            {filter.channel && (
+              <Badge className="bg-orange-50 text-orange-700 border border-orange-200">
+                Channel: {filter.channel}
+              </Badge>
+            )}
+            {filter.subChannel && (
+              <Badge className="bg-orange-50 text-orange-700 border border-orange-200">
+                Sub-Channel: {filter.subChannel}
+              </Badge>
+            )}
+            {filter.branches.map((b) => (
+              <Badge key={b} className="bg-blue-50 text-blue-700 border border-blue-200">
+                Branch: {b}
+              </Badge>
+            ))}
+            {filter.designations.map((d) => (
+              <Badge key={d} className="bg-teal-50 text-teal-700 border border-teal-200">
+                {d}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Past Qualified Cycles Component ─────────────────────────────────────────
+
+interface PastQualifiedCyclesProps {
+  cycles: PastCycle[]
+}
+
+const PastQualifiedCycles = ({ cycles }: PastQualifiedCyclesProps) => {
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  return (
+    <Card className="rounded-xl border border-neutral-200 shadow-sm">
+      <CardHeader className="px-5 pb-2 pt-5">
+        <div className="flex items-center gap-2">
+          <FiInfo className="h-4 w-4 text-indigo-500" />
+          <CardTitle className="text-base">Past Qualified Cycles</CardTitle>
+        </div>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          Reference list of previously qualified incentive program cycles.
+        </p>
+      </CardHeader>
+      <CardContent className="px-5 pb-5">
+        {cycles.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-neutral-300 p-6 text-center">
+            <FiInfo className="mx-auto mb-2 h-5 w-5 text-neutral-400" />
+            <p className="text-sm font-medium text-neutral-500">No past qualified cycles</p>
+            <p className="mt-0.5 text-xs text-neutral-400">
+              Qualified cycles will appear here once programs are completed.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-neutral-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    Incentive Program Date
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    Incentive Program Name
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {cycles.map((cycle, idx) => (
+                  <tr
+                    key={idx}
+                    className={`border-b border-neutral-100 transition hover:bg-neutral-50 ${
+                      idx === cycles.length - 1 ? 'border-b-0' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-xs font-medium text-neutral-600">
+                      <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 font-normal">
+                        {formatDate(cycle.date)}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-neutral-800">{cycle.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 // ─── Slab Section Component ───────────────────────────────────────────────────
 
@@ -184,10 +549,10 @@ const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove }: SlabSe
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+    <div className="h-full bg-white">
       {/* Slab Header */}
-      <div className="flex items-center justify-between rounded-t-xl border-b border-neutral-200 bg-neutral-50 px-4 py-3">
-        <h2 className="text-base font-semibold text-neutral-800">Slab {slabNumber}</h2>
+      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-4 py-3">
+        <h2 className="text-base font-semibold text-neutral-800">Slab {slabNumber} Configuration</h2>
         {canRemove && (
           <button
             type="button"
@@ -528,18 +893,35 @@ const createSlab = (): SlabState => ({
 
 const IncentiveProgramConfig = () => {
   const [slabs, setSlabs] = useState<Array<SlabState>>(() => [createSlab()])
+  const [activeSlabId, setActiveSlabId] = useState<string>(() => slabs[0]?.id ?? '')
+  const [agentFilter, setAgentFilter] = useState<AgentFilterState>({
+    channel: '',
+    subChannel: '',
+    branches: [],
+    designations: [],
+  })
 
   const updateSlab = (id: string, updates: Partial<SlabState>) => {
     setSlabs((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
   }
 
   const addSlab = () => {
-    setSlabs((prev) => [...prev, createSlab()])
+    const newSlab = createSlab()
+    setSlabs((prev) => [...prev, newSlab])
+    setActiveSlabId(newSlab.id)
   }
 
   const removeSlab = (id: string) => {
-    setSlabs((prev) => prev.filter((s) => s.id !== id))
+    setSlabs((prev) => {
+      const next = prev.filter((s) => s.id !== id)
+      if (activeSlabId === id && next.length > 0) {
+        setActiveSlabId(next[next.length - 1].id)
+      }
+      return next
+    })
   }
+
+  const activeSlab = slabs.find((s) => s.id === activeSlabId) ?? slabs[0]
 
   const isAllValid = slabs.every((s) => {
     if (s.programName.trim() === '' || s.startDate === '' || s.endDate === '') return false
@@ -549,14 +931,13 @@ const IncentiveProgramConfig = () => {
 
   return (
     <div className="min-h-screen py-2">
-      <div className="max-w-full space-y-4 p-2">
-        {/* Header */}
+      <div className="max-w-full space-y-5 p-2">
+        {/* Page Header */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-neutral-900">Program Configuration</h1>
             <p className="mt-1 text-sm text-neutral-500">
-              Configure one or more incentive slabs — each slab defines its own program details,
-              KPI selection, filter criteria, and incentive calculation formula.
+              Configure incentive slabs with agent filters, eligibility cycles, and calculation formulas.
             </p>
           </div>
           <Button
@@ -566,16 +947,19 @@ const IncentiveProgramConfig = () => {
             icon={<FiCheck className="h-4 w-4" />}
             onClick={() => {
               // TODO: POST /api/programs — wire up when backend endpoint is available
-              const payload = slabs.map((s) => ({
-                name: s.programName,
-                description: s.programDescription,
-                startDate: s.startDate,
-                endDate: s.endDate,
-                selectedKPIs: s.selectedKPIs,
-                criteriaTab: s.criteriaTab,
-                selectionExpression: s.selectionExpression,
-                incentiveExpression: s.incentiveExpression,
-              }))
+              const payload = {
+                agentFilter,
+                slabs: slabs.map((s) => ({
+                  name: s.programName,
+                  description: s.programDescription,
+                  startDate: s.startDate,
+                  endDate: s.endDate,
+                  selectedKPIs: s.selectedKPIs,
+                  criteriaTab: s.criteriaTab,
+                  selectionExpression: s.selectionExpression,
+                  incentiveExpression: s.incentiveExpression,
+                })),
+              }
               console.info('Save Programs:', JSON.stringify(payload, null, 2))
             }}
           >
@@ -583,30 +967,90 @@ const IncentiveProgramConfig = () => {
           </Button>
         </div>
 
-        {/* Slabs */}
-        {slabs.map((slab, index) => (
-          <SlabSection
-            key={slab.id}
-            slab={slab}
-            slabNumber={index + 1}
-            canRemove={slabs.length > 1}
-            onChange={(updates) => updateSlab(slab.id, updates)}
-            onRemove={() => removeSlab(slab.id)}
-          />
-        ))}
+        {/* 1. Agent Filter */}
+        <AgentFilter filter={agentFilter} onChange={(updates) => setAgentFilter((prev) => ({ ...prev, ...updates }))} />
 
-        {/* Add Slab */}
-        <button
-          type="button"
-          onClick={addSlab}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-4 text-sm font-medium text-neutral-500 transition hover:border-teal-400 hover:text-teal-600"
-        >
-          <FiPlus className="h-4 w-4" />
-          Add Slab
-        </button>
+        {/* 2. Past Qualified Cycles */}
+        <PastQualifiedCycles cycles={PAST_QUALIFIED_CYCLES} />
+
+        {/* 3. Slab Configuration — Left-Right Panel Layout */}
+        <Card className="rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
+          <CardHeader className="px-5 pb-2 pt-5 border-b border-neutral-200">
+            <CardTitle className="text-base">Slab Configuration</CardTitle>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Select a slab from the left panel to configure its details on the right.
+            </p>
+          </CardHeader>
+          <div className="flex min-h-[600px]">
+            {/* Left Panel — Slab List */}
+            <div className="w-52 shrink-0 border-r border-neutral-200 bg-neutral-50 flex flex-col">
+              <div className="flex-1 overflow-y-auto py-2">
+                {slabs.map((slab, index) => {
+                  const isActive = slab.id === (activeSlab?.id ?? '')
+                  const hasName = slab.programName.trim() !== ''
+                  return (
+                    <button
+                      key={slab.id}
+                      type="button"
+                      onClick={() => setActiveSlabId(slab.id)}
+                      className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm transition border-l-2 ${
+                        isActive
+                          ? 'border-l-teal-500 bg-white font-semibold text-teal-700'
+                          : 'border-l-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">
+                          Slab {index + 1}
+                        </p>
+                        <p className={`truncate text-sm ${hasName ? 'text-neutral-800' : 'text-neutral-400 italic'}`}>
+                          {hasName ? slab.programName : 'Untitled'}
+                        </p>
+                      </div>
+                      {isActive && <FiChevronRight className="h-3.5 w-3.5 shrink-0 text-teal-500" />}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Add Slab Button */}
+              <div className="border-t border-neutral-200 p-3">
+                <button
+                  type="button"
+                  onClick={addSlab}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-500 transition hover:border-teal-400 hover:text-teal-600"
+                >
+                  <FiPlus className="h-3.5 w-3.5" />
+                  Add Slab
+                </button>
+              </div>
+            </div>
+
+            {/* Right Panel — Active Slab Config */}
+            <div className="flex-1 overflow-y-auto">
+              {activeSlab ? (
+                <SlabSection
+                  key={activeSlab.id}
+                  slab={activeSlab}
+                  slabNumber={slabs.findIndex((s) => s.id === activeSlab.id) + 1}
+                  canRemove={slabs.length > 1}
+                  onChange={(updates) => updateSlab(activeSlab.id, updates)}
+                  onRemove={() => removeSlab(activeSlab.id)}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center p-10 text-center">
+                  <div>
+                    <p className="text-sm font-medium text-neutral-500">No slab selected</p>
+                    <p className="mt-1 text-xs text-neutral-400">Add a slab to get started.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   )
 }
 
 export default IncentiveProgramConfig
+

@@ -82,6 +82,9 @@ const AuthCommissionConfigcommissionListHistoryLazyRouteImport =
 const AuthSearchIncentiveProgramConfigIndexLazyRouteImport = createFileRoute(
   '/_auth/search/incentive/program-config/',
 )()
+const AuthSearchIncentiveProductWeightageIndexLazyRouteImport = createFileRoute(
+  '/_auth/search/incentive/product-weightage/',
+)()
 const AuthSearchIncentiveKpiLibraryIndexLazyRouteImport = createFileRoute(
   '/_auth/search/incentive/kpi-library/',
 )()
@@ -374,6 +377,16 @@ const AuthSearchIncentiveProgramConfigIndexLazyRoute =
       (d) => d.Route,
     ),
   )
+const AuthSearchIncentiveProductWeightageIndexLazyRoute =
+  AuthSearchIncentiveProductWeightageIndexLazyRouteImport.update({
+    id: '/search/incentive/product-weightage/',
+    path: '/search/incentive/product-weightage/',
+    getParentRoute: () => AuthRoute,
+  } as any).lazy(() =>
+    import('./routes/_auth/search/incentive/product-weightage/index.lazy').then(
+      (d) => d.Route,
+    ),
+  )
 const AuthSearchIncentiveKpiLibraryIndexLazyRoute =
   AuthSearchIncentiveKpiLibraryIndexLazyRouteImport.update({
     id: '/search/incentive/kpi-library/',
@@ -490,8 +503,8 @@ export interface FileRoutesByFullPath {
   '/search/dashboard/code-movement': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/search/incentive/kpi-library': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
   '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
+  '/search/incentive/product-weightage': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
 }
-export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$not-found': typeof NotFoundRoute
   '/login': typeof LoginLazyRoute
@@ -538,6 +551,7 @@ export interface FileRoutesByTo {
   '/search/dashboard/code-movement': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/search/incentive/kpi-library': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
   '/search/incentive/program-config': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
+  '/search/incentive/product-weightage': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -588,6 +602,7 @@ export interface FileRoutesById {
   '/_auth/search/dashboard/code-movement/': typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   '/_auth/search/incentive/kpi-library/': typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
   '/_auth/search/incentive/program-config/': typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
+  '/_auth/search/incentive/product-weightage/': typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -638,6 +653,7 @@ export interface FileRouteTypes {
     | '/search/dashboard/code-movement'
     | '/search/incentive/kpi-library'
     | '/search/incentive/program-config'
+    | '/search/incentive/product-weightage'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -686,6 +702,7 @@ export interface FileRouteTypes {
     | '/search/dashboard/code-movement'
     | '/search/incentive/kpi-library'
     | '/search/incentive/program-config'
+    | '/search/incentive/product-weightage'
   id:
     | '__root__'
     | '/'
@@ -735,6 +752,7 @@ export interface FileRouteTypes {
     | '/_auth/search/dashboard/code-movement/'
     | '/_auth/search/incentive/kpi-library/'
     | '/_auth/search/incentive/program-config/'
+    | '/_auth/search/incentive/product-weightage/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1026,6 +1044,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSearchIncentiveProgramConfigIndexLazyRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/search/incentive/product-weightage/': {
+      id: '/_auth/search/incentive/product-weightage/'
+      path: '/search/incentive/product-weightage'
+      fullPath: '/search/incentive/product-weightage'
+      preLoaderRoute: typeof AuthSearchIncentiveProductWeightageIndexLazyRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/search/incentive/kpi-library/': {
       id: '/_auth/search/incentive/kpi-library/'
       path: '/search/incentive/kpi-library'
@@ -1122,6 +1147,7 @@ interface AuthRouteChildren {
   AuthSearchDashboardCodeMovementIndexLazyRoute: typeof AuthSearchDashboardCodeMovementIndexLazyRoute
   AuthSearchIncentiveKpiLibraryIndexLazyRoute: typeof AuthSearchIncentiveKpiLibraryIndexLazyRoute
   AuthSearchIncentiveProgramConfigIndexLazyRoute: typeof AuthSearchIncentiveProgramConfigIndexLazyRoute
+  AuthSearchIncentiveProductWeightageIndexLazyRoute: typeof AuthSearchIncentiveProductWeightageIndexLazyRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -1187,6 +1213,8 @@ const AuthRouteChildren: AuthRouteChildren = {
     AuthSearchIncentiveKpiLibraryIndexLazyRoute,
   AuthSearchIncentiveProgramConfigIndexLazyRoute:
     AuthSearchIncentiveProgramConfigIndexLazyRoute,
+  AuthSearchIncentiveProductWeightageIndexLazyRoute:
+    AuthSearchIncentiveProductWeightageIndexLazyRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
