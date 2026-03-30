@@ -329,7 +329,7 @@ const ProductWeightage = () => {
                     : 'bg-amber-100 text-amber-700 border border-amber-200'
                 }`}
               >
-                Total: {totalWeight}%{totalWeight !== 100 && ' (must equal 100%)'}
+                Total: {totalWeight.toFixed(2)}%{totalWeight !== 100 && ' (must equal 100%)'}
               </Badge>
             )}
           </div>

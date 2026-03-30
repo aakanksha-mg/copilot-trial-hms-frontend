@@ -977,7 +977,7 @@ const IncentiveProgramConfig = () => {
   const pastCycles: PastCycle[] = useMemo(
     () =>
       pastPrograms
-        .filter((p) => p.status?.toLowerCase() === 'completed' || p.endDate < new Date().toISOString())
+        .filter((p) => p.status?.toLowerCase() === 'completed' || new Date(p.endDate) < new Date())
         .map((p) => ({
           date: p.endDate,
           name: p.name,
@@ -1022,7 +1022,10 @@ const IncentiveProgramConfig = () => {
       // Map each slab to a separate program creation request
       for (const s of slabs) {
         const filters = agentFilter.branches.length > 0
-          ? [{ branchId: agentFilter.branches[0], designationIds: agentFilter.designations }]
+          ? agentFilter.branches.map((branchId) => ({
+              branchId,
+              designationIds: agentFilter.designations,
+            }))
           : []
         await incentiveService.createProgram({
           name: s.programName,
