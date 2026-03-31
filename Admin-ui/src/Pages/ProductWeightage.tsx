@@ -413,10 +413,7 @@ const ProductWeightage = () => {
                           {dim?.saved ? (
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="text-xs font-medium text-green-700 leading-tight">
-                                {dim.tableName}
-                              </span>
-                              <span className="text-xs text-green-600 leading-tight">
-                                {dim.property}
+                                {dim.tableName}.{dim.property}
                               </span>
                               {(dim.rangeFrom || dim.rangeTo) && (
                                 <span className="text-xs text-green-600 leading-tight">
