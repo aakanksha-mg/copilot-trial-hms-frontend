@@ -12,11 +12,32 @@ const MOCK_PRODUCTS = [
   { code: 'HONDA_CITY', name: 'Honda City' },
 ]
 
-const MOCK_VERSIONS: Record<string, Array<string>> = {
-  MARUTI_CIAZ: ['2002-2003', '2025-2003'],
-  MARUTI_SWIFT: ['2015-2016', '2020-2021'],
-  HYUNDAI_I20: ['2018-2019', '2022-2023'],
-  HONDA_CITY: ['2016-2017', '2021-2022'],
+// Mock API: one version per product
+const MOCK_VERSIONS: Record<string, string> = {
+  MARUTI_CIAZ: '2002-2003',
+  MARUTI_SWIFT: '2015-2016',
+  HYUNDAI_I20: '2018-2019',
+  HONDA_CITY: '2016-2017',
+}
+
+// Mock API: table name options
+const MOCK_TABLE_NAMES = ['Sales', 'Products', 'Customers', 'Orders', 'Inventory']
+
+// Mock API: column/property options per table
+const MOCK_COLUMN_PROPERTIES: Record<string, string[]> = {
+  Sales: ['Amount', 'Quantity', 'Discount', 'Tax'],
+  Products: ['Price', 'Category', 'Brand', 'Rating'],
+  Customers: ['Region', 'Type', 'Tier', 'Credit Score'],
+  Orders: ['Status', 'Priority', 'Channel', 'Value'],
+  Inventory: ['Stock Level', 'Reorder Point', 'Lead Time', 'Unit Cost'],
+}
+
+// Mock API: weightage value per product
+const MOCK_WEIGHTAGE: Record<string, number> = {
+  MARUTI_CIAZ: 25,
+  MARUTI_SWIFT: 30,
+  HYUNDAI_I20: 20,
+  HONDA_CITY: 25,
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -33,6 +54,7 @@ interface DetailRow {
   weightageDetailsId: string
   productCode: string
   version: string
+  weightage: number | null
   dimensions: Partial<Record<number, DimensionData>>
 }
 
@@ -61,6 +83,8 @@ const DimensionModal = ({ dimensionNo, initial, onSave, onCancel }: DimensionMod
     rangeTo: initial?.rangeTo ?? '',
   })
 
+  const columnOptions = MOCK_COLUMN_PROPERTIES[form.tableName] ?? []
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
@@ -78,23 +102,38 @@ const DimensionModal = ({ dimensionNo, initial, onSave, onCancel }: DimensionMod
         <div className="space-y-3 px-5 py-4">
           <div>
             <Label className="mb-1 block text-xs font-semibold text-neutral-600">Table Name</Label>
-            <input
-              type="text"
+            <select
               className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               value={form.tableName}
-              onChange={(e) => setForm((f) => ({ ...f, tableName: e.target.value }))}
-            />
+              onChange={(e) =>
+                setForm((f) => ({ ...f, tableName: e.target.value, property: '' }))
+              }
+            >
+              <option value="">Select…</option>
+              {MOCK_TABLE_NAMES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <Label className="mb-1 block text-xs font-semibold text-neutral-600">
               Column/Property
             </Label>
-            <input
-              type="text"
-              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <select
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-neutral-100 disabled:cursor-not-allowed"
               value={form.property}
+              disabled={!form.tableName}
               onChange={(e) => setForm((f) => ({ ...f, property: e.target.value }))}
-            />
+            >
+              <option value="">Select…</option>
+              {columnOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <Label className="mb-1 block text-xs font-semibold text-neutral-600">Range From</Label>
@@ -169,7 +208,13 @@ const ProductWeightage = () => {
     rowCounterRef.current += 1
     setDetailRows((prev) => [
       ...prev,
-      { weightageDetailsId: `WD-${rowCounterRef.current}`, productCode: '', version: '', dimensions: {} },
+      {
+        weightageDetailsId: `WD-${rowCounterRef.current}`,
+        productCode: '',
+        version: '',
+        weightage: null,
+        dimensions: {},
+      },
     ])
   }
 
@@ -181,16 +226,16 @@ const ProductWeightage = () => {
 
   // ─── Update Row Field ────────────────────────────────────────────────────
 
-  const updateRowField = (
-    weightageDetailsId: string,
-    field: 'productCode' | 'version',
-    value: string,
-  ) => {
+  const updateProductCode = (weightageDetailsId: string, value: string) => {
     setDetailRows((prev) =>
       prev.map((r) => {
         if (r.weightageDetailsId !== weightageDetailsId) return r
-        if (field === 'productCode') return { ...r, productCode: value, version: '' }
-        return { ...r, [field]: value }
+        return {
+          ...r,
+          productCode: value,
+          version: MOCK_VERSIONS[value] ?? '',
+          weightage: MOCK_WEIGHTAGE[value] ?? null,
+        }
       }),
     )
   }
@@ -290,6 +335,9 @@ const ProductWeightage = () => {
                 <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
                   Version
                 </th>
+                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
+                  Weightage
+                </th>
                 {DIMENSIONS.map((d) => (
                   <th
                     key={d}
@@ -307,7 +355,7 @@ const ProductWeightage = () => {
               {detailRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={14}
+                    colSpan={15}
                     className="px-4 py-8 text-center text-sm text-neutral-400"
                   >
                     {weightageId
@@ -329,7 +377,7 @@ const ProductWeightage = () => {
                         className="w-full rounded border border-orange-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                         value={row.productCode}
                         onChange={(e) =>
-                          updateRowField(row.weightageDetailsId, 'productCode', e.target.value)
+                          updateProductCode(row.weightageDetailsId, e.target.value)
                         }
                       >
                         <option value="">Select…</option>
@@ -340,22 +388,11 @@ const ProductWeightage = () => {
                         ))}
                       </select>
                     </td>
-                    <td className="border border-orange-200 px-2 py-1">
-                      <select
-                        className="w-full rounded border border-orange-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-orange-50 disabled:cursor-not-allowed"
-                        value={row.version}
-                        disabled={!row.productCode}
-                        onChange={(e) =>
-                          updateRowField(row.weightageDetailsId, 'version', e.target.value)
-                        }
-                      >
-                        <option value="">Select…</option>
-                        {(MOCK_VERSIONS[row.productCode] ?? []).map((v) => (
-                          <option key={v} value={v}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
+                    <td className="border border-orange-200 px-3 py-2 text-center text-xs">
+                      {row.version || <span className="text-neutral-400">—</span>}
+                    </td>
+                    <td className="border border-orange-200 px-3 py-2 text-center text-xs font-medium">
+                      {row.weightage !== null ? `${row.weightage}%` : <span className="text-neutral-400">—</span>}
                     </td>
                     {DIMENSIONS.map((d) => {
                       const dim = row.dimensions[d]
@@ -364,25 +401,47 @@ const ProductWeightage = () => {
                           key={d}
                           className={`border border-orange-200 px-2 py-1 text-center ${dim?.saved ? 'bg-green-100' : ''}`}
                         >
-                          <button
-                            type="button"
-                            className={`text-xs font-semibold underline ${
-                              dim?.saved
-                                ? 'text-green-700 hover:text-green-900'
-                                : 'text-blue-600 hover:text-blue-800'
-                            }`}
-                            onClick={() =>
-                              setDimModal({
-                                rowId: row.weightageDetailsId,
-                                dimensionNo: d,
-                                weightageDetailsId: row.weightageDetailsId,
-                                productCode: row.productCode,
-                                version: row.version,
-                              })
-                            }
-                          >
-                            {dim?.saved ? '✓ Edit' : 'Click Here'}
-                          </button>
+                          {dim?.saved ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-xs font-medium text-green-700 leading-tight">
+                                {dim.tableName}
+                              </span>
+                              <span className="text-xs text-green-600 leading-tight">
+                                {dim.property}
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs text-blue-600 hover:text-blue-800 underline mt-0.5"
+                                onClick={() =>
+                                  setDimModal({
+                                    rowId: row.weightageDetailsId,
+                                    dimensionNo: d,
+                                    weightageDetailsId: row.weightageDetailsId,
+                                    productCode: row.productCode,
+                                    version: row.version,
+                                  })
+                                }
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline"
+                              onClick={() =>
+                                setDimModal({
+                                  rowId: row.weightageDetailsId,
+                                  dimensionNo: d,
+                                  weightageDetailsId: row.weightageDetailsId,
+                                  productCode: row.productCode,
+                                  version: row.version,
+                                })
+                              }
+                            >
+                              Click Here
+                            </button>
+                          )}
                         </td>
                       )
                     })}
