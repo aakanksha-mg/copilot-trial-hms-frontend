@@ -134,3 +134,42 @@ export interface ISaveProductWeightageRequest {
   id: string
   weightages: IProductWeightageItem[]
 }
+
+// ─── Weightage Master ─────────────────────────────────────────────────────────
+
+export interface ICreateWeightageMasterRequest {
+  weightName: string
+  startDate: string
+  endDate: string
+}
+
+export interface ICreateWeightageMasterResponse {
+  weightageId: string
+}
+
+// ─── Weightage Details ────────────────────────────────────────────────────────
+
+export interface ICreateWeightageDetailsRequest {
+  weightageId: string
+}
+
+export interface ICreateWeightageDetailsResponse {
+  weightageDetailsId: string
+}
+
+export interface IDeleteWeightageDetailsRequest {
+  weightageDetailsId: string
+}
+
+// ─── Weightage Dimension ──────────────────────────────────────────────────────
+
+export interface ISaveWeightageDimensionRequest {
+  weightageDetailsId: string
+  productCode: string
+  version: string
+  dimensionNo: number
+  tableName: string
+  property: string
+  rangeFrom: string
+  rangeTo: string
+}
