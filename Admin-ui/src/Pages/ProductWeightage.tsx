@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { FiPlus, FiTrash2 } from 'react-icons/fi'
 import { Label } from '@/components/ui/label'
 import Button from '@/components/ui/button'
-import { incentiveService } from '@/services/incentiveService'
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
@@ -50,12 +49,11 @@ interface DimModalState {
 interface DimensionModalProps {
   dimensionNo: number
   initial: DimensionData | null
-  saving: boolean
   onSave: (data: Omit<DimensionData, 'saved'>) => void
   onCancel: () => void
 }
 
-const DimensionModal = ({ dimensionNo, initial, saving, onSave, onCancel }: DimensionModalProps) => {
+const DimensionModal = ({ dimensionNo, initial, onSave, onCancel }: DimensionModalProps) => {
   const [form, setForm] = useState({
     tableName: initial?.tableName ?? '',
     property: initial?.property ?? '',
@@ -119,11 +117,11 @@ const DimensionModal = ({ dimensionNo, initial, saving, onSave, onCancel }: Dime
         </div>
 
         <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
+          <Button variant="outline" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="green" size="sm" onClick={() => onSave(form)} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
+          <Button variant="green" size="sm" onClick={() => onSave(form)}>
+            Save
           </Button>
         </div>
       </div>
@@ -139,21 +137,18 @@ const ProductWeightage = () => {
   // Master form
   const [masterForm, setMasterForm] = useState({ weightName: '', startDate: '', endDate: '' })
   const [weightageId, setWeightageId] = useState<string | null>(null)
-  const [masterSaving, setMasterSaving] = useState(false)
   const [masterError, setMasterError] = useState<string | null>(null)
 
   // Detail rows
   const [detailRows, setDetailRows] = useState<Array<DetailRow>>([])
-  const [rowSaving, setRowSaving] = useState(false)
-  const [rowError, setRowError] = useState<string | null>(null)
+  const rowCounterRef = useRef(0)
 
   // Dimension modal
   const [dimModal, setDimModal] = useState<DimModalState | null>(null)
-  const [dimSaving, setDimSaving] = useState(false)
 
-  // ─── Create Master ───────────────────────────────────────────────────────
+  // ─── Create Master (mock) ────────────────────────────────────────────────
 
-  const handleCreateMaster = async () => {
+  const handleCreateMaster = () => {
     const { weightName, startDate, endDate } = masterForm
     if (!weightName.trim() || !startDate || !endDate) {
       setMasterError('All fields (Weight Name, Start Date, End Date) are required.')
@@ -163,46 +158,25 @@ const ProductWeightage = () => {
       setMasterError('End Date must be on or after Start Date.')
       return
     }
-    setMasterSaving(true)
     setMasterError(null)
-    try {
-      const res = await incentiveService.createWeightageMaster({ weightName, startDate, endDate })
-      setWeightageId(res.weightageId)
-    } catch {
-      setMasterError('Failed to create weightage master. Please try again.')
-    } finally {
-      setMasterSaving(false)
-    }
+    setWeightageId(`WM-${Date.now()}`)
   }
 
-  // ─── Add Detail Row ──────────────────────────────────────────────────────
+  // ─── Add Detail Row (mock) ───────────────────────────────────────────────
 
-  const handleAddRow = async () => {
+  const handleAddRow = () => {
     if (!weightageId) return
-    setRowSaving(true)
-    setRowError(null)
-    try {
-      const res = await incentiveService.createWeightageDetails({ weightageId })
-      setDetailRows((prev) => [
-        ...prev,
-        { weightageDetailsId: res.weightageDetailsId, productCode: '', version: '', dimensions: {} },
-      ])
-    } catch {
-      setRowError('Failed to add row. Please try again.')
-    } finally {
-      setRowSaving(false)
-    }
+    rowCounterRef.current += 1
+    setDetailRows((prev) => [
+      ...prev,
+      { weightageDetailsId: `WD-${rowCounterRef.current}`, productCode: '', version: '', dimensions: {} },
+    ])
   }
 
-  // ─── Delete Detail Row ───────────────────────────────────────────────────
+  // ─── Delete Detail Row (mock) ────────────────────────────────────────────
 
-  const handleDeleteRow = async (weightageDetailsId: string) => {
-    try {
-      await incentiveService.deleteWeightageDetails({ weightageDetailsId })
-      setDetailRows((prev) => prev.filter((r) => r.weightageDetailsId !== weightageDetailsId))
-    } catch {
-      setRowError('Failed to delete row. Please try again.')
-    }
+  const handleDeleteRow = (weightageDetailsId: string) => {
+    setDetailRows((prev) => prev.filter((r) => r.weightageDetailsId !== weightageDetailsId))
   }
 
   // ─── Update Row Field ────────────────────────────────────────────────────
@@ -221,35 +195,21 @@ const ProductWeightage = () => {
     )
   }
 
-  // ─── Save Dimension ──────────────────────────────────────────────────────
+  // ─── Save Dimension (mock) ───────────────────────────────────────────────
 
-  const handleDimSave = async (data: Omit<DimensionData, 'saved'>) => {
+  const handleDimSave = (data: Omit<DimensionData, 'saved'>) => {
     if (!dimModal) return
-    const { rowId, dimensionNo, weightageDetailsId, productCode, version } = dimModal
-    setDimSaving(true)
-    try {
-      await incentiveService.saveWeightageDimension({
-        weightageDetailsId,
-        productCode,
-        version,
-        dimensionNo,
-        ...data,
-      })
-      setDetailRows((prev) =>
-        prev.map((r) => {
-          if (r.weightageDetailsId !== rowId) return r
-          return {
-            ...r,
-            dimensions: { ...r.dimensions, [dimensionNo]: { ...data, saved: true } },
-          }
-        }),
-      )
-      setDimModal(null)
-    } catch {
-      // keep modal open on error so user can retry
-    } finally {
-      setDimSaving(false)
-    }
+    const { rowId, dimensionNo } = dimModal
+    setDetailRows((prev) =>
+      prev.map((r) => {
+        if (r.weightageDetailsId !== rowId) return r
+        return {
+          ...r,
+          dimensions: { ...r.dimensions, [dimensionNo]: { ...data, saved: true } },
+        }
+      }),
+    )
+    setDimModal(null)
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -291,8 +251,8 @@ const ProductWeightage = () => {
             />
           </div>
           {!weightageId ? (
-            <Button variant="green" size="sm" onClick={handleCreateMaster} disabled={masterSaving}>
-              {masterSaving ? 'Creating…' : 'Create'}
+            <Button variant="green" size="sm" onClick={handleCreateMaster}>
+              Create
             </Button>
           ) : (
             <span className="text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-3 py-1.5">
@@ -311,17 +271,11 @@ const ProductWeightage = () => {
             size="sm"
             icon={<FiPlus className="h-4 w-4" />}
             onClick={handleAddRow}
-            disabled={!weightageId || rowSaving}
+            disabled={!weightageId}
           >
-            {rowSaving ? 'Adding…' : 'Add New Row'}
+            Add New Row
           </Button>
         </div>
-
-        {rowError && (
-          <div className="mb-2 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-600">
-            {rowError}
-          </div>
-        )}
 
         <div className="overflow-x-auto rounded-lg border border-neutral-300">
           <table className="w-full text-sm border-collapse">
@@ -459,7 +413,6 @@ const ProductWeightage = () => {
               dimModal.dimensionNo
             ] ?? null
           }
-          saving={dimSaving}
           onSave={handleDimSave}
           onCancel={() => setDimModal(null)}
         />
