@@ -32,14 +32,6 @@ const MOCK_COLUMN_PROPERTIES: Record<string, string[]> = {
   Inventory: ['Stock Level', 'Reorder Point', 'Lead Time', 'Unit Cost'],
 }
 
-// Mock API: weightage value per product
-const MOCK_WEIGHTAGE: Record<string, number> = {
-  MARUTI_CIAZ: 25,
-  MARUTI_SWIFT: 30,
-  HYUNDAI_I20: 20,
-  HONDA_CITY: 25,
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DimensionData {
@@ -234,8 +226,23 @@ const ProductWeightage = () => {
           ...r,
           productCode: value,
           version: MOCK_VERSIONS[value] ?? '',
-          weightage: MOCK_WEIGHTAGE[value] ?? null,
         }
+      }),
+    )
+  }
+
+  const updateWeightage = (weightageDetailsId: string, value: string) => {
+    setDetailRows((prev) =>
+      prev.map((r) => {
+        if (r.weightageDetailsId !== weightageDetailsId) return r
+        let newWeightage: number | null = r.weightage
+        if (value === '') {
+          newWeightage = null
+        } else {
+          const parsed = parseFloat(value)
+          if (!isNaN(parsed)) newWeightage = parsed
+        }
+        return { ...r, weightage: newWeightage }
       }),
     )
   }
@@ -327,9 +334,6 @@ const ProductWeightage = () => {
             <thead>
               <tr className="bg-blue-500 text-white">
                 <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
-                  WeightageDetailsId
-                </th>
-                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
                   Product Code
                 </th>
                 <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
@@ -355,7 +359,7 @@ const ProductWeightage = () => {
               {detailRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={15}
+                    colSpan={14}
                     className="px-4 py-8 text-center text-sm text-neutral-400"
                   >
                     {weightageId
@@ -369,9 +373,6 @@ const ProductWeightage = () => {
                     key={row.weightageDetailsId}
                     className={idx % 2 === 0 ? 'bg-orange-50' : 'bg-orange-100'}
                   >
-                    <td className="border border-orange-200 px-3 py-2 text-center font-mono text-xs">
-                      {row.weightageDetailsId}
-                    </td>
                     <td className="border border-orange-200 px-2 py-1">
                       <select
                         className="w-full rounded border border-orange-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -391,8 +392,16 @@ const ProductWeightage = () => {
                     <td className="border border-orange-200 px-3 py-2 text-center text-xs">
                       {row.version || <span className="text-neutral-400">—</span>}
                     </td>
-                    <td className="border border-orange-200 px-3 py-2 text-center text-xs font-medium">
-                      {row.weightage !== null ? `${row.weightage}%` : <span className="text-neutral-400">—</span>}
+                    <td className="border border-orange-200 px-2 py-1 text-center">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        placeholder="0"
+                        className="w-16 rounded border border-orange-300 bg-white px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        value={row.weightage ?? ''}
+                        onChange={(e) => updateWeightage(row.weightageDetailsId, e.target.value)}
+                      />
                     </td>
                     {DIMENSIONS.map((d) => {
                       const dim = row.dimensions[d]
@@ -409,6 +418,11 @@ const ProductWeightage = () => {
                               <span className="text-xs text-green-600 leading-tight">
                                 {dim.property}
                               </span>
+                              {(dim.rangeFrom || dim.rangeTo) && (
+                                <span className="text-xs text-green-600 leading-tight">
+                                  {dim.rangeFrom} – {dim.rangeTo}
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 className="text-xs text-blue-600 hover:text-blue-800 underline mt-0.5"
