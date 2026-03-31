@@ -75,6 +75,10 @@ export const APIRoutes = {
   UPDATE_INCENTIVE_PROGRAM: 'updateIncentiveProgram',
   GET_INCENTIVE_PROGRAM_PRODUCT_WEIGHTAGE: 'getIncentiveProgramProductWeightage',
   SAVE_INCENTIVE_PROGRAM_PRODUCT_WEIGHTAGE: 'saveIncentiveProgramProductWeightage',
+  CREATE_WEIGHTAGE_MASTER: 'createWeightageMaster',
+  CREATE_WEIGHTAGE_DETAILS: 'createWeightageDetails',
+  DELETE_WEIGHTAGE_DETAILS: 'deleteWeightageDetails',
+  SAVE_WEIGHTAGE_DIMENSION: 'saveWeightageDimension',
 }
 
 export const LoginConstants = {

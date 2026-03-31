@@ -1,61 +1,73 @@
-import { useState, useEffect, useCallback } from 'react'
-import { FiEdit2, FiPlus, FiRefreshCw, FiTrash2 } from 'react-icons/fi'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import Button from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { useState } from 'react'
+import { FiPlus, FiTrash2 } from 'react-icons/fi'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
+import Button from '@/components/ui/button'
 import { incentiveService } from '@/services/incentiveService'
-import type { IIncentiveProgram, IProductWeightageItem } from '@/models/incentive'
+
+// ─── Mock Data ────────────────────────────────────────────────────────────────
+
+const MOCK_PRODUCTS = [
+  { code: 'MARUTI_CIAZ', name: 'Maruti Ciaz' },
+  { code: 'MARUTI_SWIFT', name: 'Maruti Swift' },
+  { code: 'HYUNDAI_I20', name: 'Hyundai i20' },
+  { code: 'HONDA_CITY', name: 'Honda City' },
+]
+
+const MOCK_VERSIONS: Record<string, Array<string>> = {
+  MARUTI_CIAZ: ['2002-2003', '2025-2003'],
+  MARUTI_SWIFT: ['2015-2016', '2020-2021'],
+  HYUNDAI_I20: ['2018-2019', '2022-2023'],
+  HONDA_CITY: ['2016-2017', '2021-2022'],
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface WeightageRecord extends IProductWeightageItem {
-  id: string
+interface DimensionData {
+  tableName: string
+  property: string
+  rangeFrom: string
+  rangeTo: string
+  saved: boolean
 }
 
-// ─── Modal Form Component ─────────────────────────────────────────────────────
+interface DetailRow {
+  weightageDetailsId: string
+  productCode: string
+  version: string
+  dimensions: Partial<Record<number, DimensionData>>
+}
 
-interface WeightageFormProps {
-  initial: Omit<WeightageRecord, 'id'> | null
-  onSave: (data: Omit<WeightageRecord, 'id'>) => void
+interface DimModalState {
+  rowId: string
+  dimensionNo: number
+  weightageDetailsId: string
+  productCode: string
+  version: string
+}
+
+// ─── Dimension Modal ──────────────────────────────────────────────────────────
+
+interface DimensionModalProps {
+  dimensionNo: number
+  initial: DimensionData | null
+  saving: boolean
+  onSave: (data: Omit<DimensionData, 'saved'>) => void
   onCancel: () => void
-  isEdit: boolean
 }
 
-const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps) => {
+const DimensionModal = ({ dimensionNo, initial, saving, onSave, onCancel }: DimensionModalProps) => {
   const [form, setForm] = useState({
-    productName: initial?.productName ?? '',
-    productCode: initial?.productCode ?? '',
-    weight: initial?.weight ?? 0,
+    tableName: initial?.tableName ?? '',
+    property: initial?.property ?? '',
+    rangeFrom: initial?.rangeFrom ?? '',
+    rangeTo: initial?.rangeTo ?? '',
   })
-  const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({})
-
-  const validate = () => {
-    const errs: Partial<Record<keyof typeof form, string>> = {}
-    if (!form.productName.trim()) errs.productName = 'Product Name is required'
-    if (!form.productCode.trim()) errs.productCode = 'Product Code is required'
-    if (form.weight <= 0 || form.weight > 100) errs.weight = 'Weight must be between 1 and 100'
-    return errs
-  }
-
-  const handleSubmit = () => {
-    const errs = validate()
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs)
-      return
-    }
-    onSave(form)
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+      <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-neutral-900">
-            {isEdit ? 'Edit Weightage' : 'Add New Weightage'}
-          </h2>
+          <h2 className="text-base font-semibold text-neutral-900">Dimension {dimensionNo}</h2>
           <button
             type="button"
             onClick={onCancel}
@@ -65,75 +77,53 @@ const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
+        <div className="space-y-3 px-5 py-4">
           <div>
-            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
-              Product Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              label=""
-              variant="outlined"
-              placeholder="e.g., Term Life"
-              value={form.productName}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, productName: e.target.value }))
-                setErrors((err) => ({ ...err, productName: undefined }))
-              }}
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Table Name</Label>
+            <input
+              type="text"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.tableName}
+              onChange={(e) => setForm((f) => ({ ...f, tableName: e.target.value }))}
             />
-            {errors.productName && (
-              <p className="mt-1 text-xs text-red-500">{errors.productName}</p>
-            )}
           </div>
-
           <div>
-            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
-              Product Code <span className="text-red-500">*</span>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">
+              Column/Property
             </Label>
-            <Input
-              label=""
-              variant="outlined"
-              placeholder="e.g., TL-001"
-              value={form.productCode}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, productCode: e.target.value }))
-                setErrors((err) => ({ ...err, productCode: undefined }))
-              }}
+            <input
+              type="text"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.property}
+              onChange={(e) => setForm((f) => ({ ...f, property: e.target.value }))}
             />
-            {errors.productCode && (
-              <p className="mt-1 text-xs text-red-500">{errors.productCode}</p>
-            )}
           </div>
-
           <div>
-            <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">
-              Weight (%) <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              label=""
-              variant="outlined"
-              type="number"
-              min={1}
-              max={100}
-              placeholder="e.g., 40"
-              value={form.weight === 0 ? '' : String(form.weight)}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, weight: Number(e.target.value) }))
-                setErrors((err) => ({ ...err, weight: undefined }))
-              }}
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Range From</Label>
+            <input
+              type="text"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.rangeFrom}
+              onChange={(e) => setForm((f) => ({ ...f, rangeFrom: e.target.value }))}
             />
-            {errors.weight && (
-              <p className="mt-1 text-xs text-red-500">{errors.weight}</p>
-            )}
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Range To</Label>
+            <input
+              type="text"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.rangeTo}
+              onChange={(e) => setForm((f) => ({ ...f, rangeTo: e.target.value }))}
+            />
           </div>
         </div>
 
-        <Separator />
-        <div className="flex justify-end gap-2 px-5 py-4">
-          <Button variant="outline" size="sm" onClick={onCancel}>
+        <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="green" size="sm" onClick={handleSubmit}>
-            {isEdit ? 'Update' : 'Add'} Weightage
+          <Button variant="green" size="sm" onClick={() => onSave(form)} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>
@@ -141,333 +131,337 @@ const WeightageForm = ({ initial, onSave, onCancel, isEdit }: WeightageFormProps
   )
 }
 
-// ─── Delete Confirmation Modal ────────────────────────────────────────────────
-
-interface DeleteConfirmProps {
-  name: string
-  onConfirm: () => void
-  onCancel: () => void
-}
-
-const DeleteConfirm = ({ name, onConfirm, onCancel }: DeleteConfirmProps) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
-      <div className="px-5 py-5">
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
-          <FiTrash2 className="h-5 w-5 text-red-500" />
-        </div>
-        <h2 className="text-base font-semibold text-neutral-900">Delete Weightage</h2>
-        <p className="mt-1.5 text-sm text-neutral-500">
-          Are you sure you want to delete <strong>{name}</strong>? This action cannot be undone.
-        </p>
-      </div>
-      <Separator />
-      <div className="flex justify-end gap-2 px-5 py-4">
-        <Button variant="outline" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button variant="destructive" size="sm" onClick={onConfirm}>
-          Delete
-        </Button>
-      </div>
-    </div>
-  </div>
-)
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+const DIMENSIONS = Array.from({ length: 10 }, (_, i) => i + 1)
+
 const ProductWeightage = () => {
-  const [programs, setPrograms] = useState<IIncentiveProgram[]>([])
-  const [selectedProgramId, setSelectedProgramId] = useState<string>('')
-  const [records, setRecords] = useState<WeightageRecord[]>([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [editRecord, setEditRecord] = useState<WeightageRecord | null>(null)
-  const [deleteRecord, setDeleteRecord] = useState<WeightageRecord | null>(null)
+  // Master form
+  const [masterForm, setMasterForm] = useState({ weightName: '', startDate: '', endDate: '' })
+  const [weightageId, setWeightageId] = useState<string | null>(null)
+  const [masterSaving, setMasterSaving] = useState(false)
+  const [masterError, setMasterError] = useState<string | null>(null)
 
-  // Load programs list on mount
-  useEffect(() => {
-    const fetchPrograms = async () => {
-      try {
-        const result = await incentiveService.getPrograms({ pageNumber: 1, pageSize: 100 })
-        const items = result?.items ?? []
-        setPrograms(items)
-        if (items.length > 0) {
-          setSelectedProgramId(items[0].id)
-        }
-      } catch (err) {
-        console.error('Failed to load programs:', err)
-      }
+  // Detail rows
+  const [detailRows, setDetailRows] = useState<Array<DetailRow>>([])
+  const [rowSaving, setRowSaving] = useState(false)
+  const [rowError, setRowError] = useState<string | null>(null)
+
+  // Dimension modal
+  const [dimModal, setDimModal] = useState<DimModalState | null>(null)
+  const [dimSaving, setDimSaving] = useState(false)
+
+  // ─── Create Master ───────────────────────────────────────────────────────
+
+  const handleCreateMaster = async () => {
+    const { weightName, startDate, endDate } = masterForm
+    if (!weightName.trim() || !startDate || !endDate) {
+      setMasterError('All fields (Weight Name, Start Date, End Date) are required.')
+      return
     }
-    fetchPrograms()
-  }, [])
-
-  // Load weightages when selected program changes
-  const fetchWeightages = useCallback(async (programId: string) => {
-    if (!programId) return
-    setLoading(true)
-    setError(null)
+    if (endDate < startDate) {
+      setMasterError('End Date must be on or after Start Date.')
+      return
+    }
+    setMasterSaving(true)
+    setMasterError(null)
     try {
-      const result = await incentiveService.getProductWeightage(programId)
-      const items = (result?.weightages ?? []).map((w, idx) => ({
-        ...w,
-        id: String(idx + 1),
-      }))
-      setRecords(items)
-    } catch (err) {
-      console.error('Failed to load product weightages:', err)
-      setError('Failed to load product weightages. Please try again.')
+      const res = await incentiveService.createWeightageMaster({ weightName, startDate, endDate })
+      setWeightageId(res.weightageId)
+    } catch {
+      setMasterError('Failed to create weightage master. Please try again.')
     } finally {
-      setLoading(false)
+      setMasterSaving(false)
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    if (selectedProgramId) {
-      fetchWeightages(selectedProgramId)
-    }
-  }, [selectedProgramId, fetchWeightages])
+  // ─── Add Detail Row ──────────────────────────────────────────────────────
 
-  const totalWeight = records.reduce((sum, r) => sum + r.weight, 0)
-
-  const persistWeightages = async (updatedRecords: WeightageRecord[]) => {
-    if (!selectedProgramId) return
-    setSaving(true)
+  const handleAddRow = async () => {
+    if (!weightageId) return
+    setRowSaving(true)
+    setRowError(null)
     try {
-      await incentiveService.saveProductWeightage({
-        id: selectedProgramId,
-        weightages: updatedRecords.map(({ productCode, productName, weight }) => ({
-          productCode,
-          productName,
-          weight,
-        })),
+      const res = await incentiveService.createWeightageDetails({ weightageId })
+      setDetailRows((prev) => [
+        ...prev,
+        { weightageDetailsId: res.weightageDetailsId, productCode: '', version: '', dimensions: {} },
+      ])
+    } catch {
+      setRowError('Failed to add row. Please try again.')
+    } finally {
+      setRowSaving(false)
+    }
+  }
+
+  // ─── Delete Detail Row ───────────────────────────────────────────────────
+
+  const handleDeleteRow = async (weightageDetailsId: string) => {
+    try {
+      await incentiveService.deleteWeightageDetails({ weightageDetailsId })
+      setDetailRows((prev) => prev.filter((r) => r.weightageDetailsId !== weightageDetailsId))
+    } catch {
+      setRowError('Failed to delete row. Please try again.')
+    }
+  }
+
+  // ─── Update Row Field ────────────────────────────────────────────────────
+
+  const updateRowField = (
+    weightageDetailsId: string,
+    field: 'productCode' | 'version',
+    value: string,
+  ) => {
+    setDetailRows((prev) =>
+      prev.map((r) => {
+        if (r.weightageDetailsId !== weightageDetailsId) return r
+        if (field === 'productCode') return { ...r, productCode: value, version: '' }
+        return { ...r, [field]: value }
+      }),
+    )
+  }
+
+  // ─── Save Dimension ──────────────────────────────────────────────────────
+
+  const handleDimSave = async (data: Omit<DimensionData, 'saved'>) => {
+    if (!dimModal) return
+    const { rowId, dimensionNo, weightageDetailsId, productCode, version } = dimModal
+    setDimSaving(true)
+    try {
+      await incentiveService.saveWeightageDimension({
+        weightageDetailsId,
+        productCode,
+        version,
+        dimensionNo,
+        ...data,
       })
-    } catch (err) {
-      console.error('Failed to save product weightages:', err)
-      setError('Failed to save. Please ensure the total weight equals 100%.')
+      setDetailRows((prev) =>
+        prev.map((r) => {
+          if (r.weightageDetailsId !== rowId) return r
+          return {
+            ...r,
+            dimensions: { ...r.dimensions, [dimensionNo]: { ...data, saved: true } },
+          }
+        }),
+      )
+      setDimModal(null)
+    } catch {
+      // keep modal open on error so user can retry
     } finally {
-      setSaving(false)
+      setDimSaving(false)
     }
   }
 
-  const handleAdd = async (data: Omit<WeightageRecord, 'id'>) => {
-    const newRecord: WeightageRecord = { ...data, id: crypto.randomUUID() }
-    const updated = [newRecord, ...records]
-    setRecords(updated)
-    setShowForm(false)
-    await persistWeightages(updated)
-  }
-
-  const handleEdit = async (data: Omit<WeightageRecord, 'id'>) => {
-    if (!editRecord) return
-    const updated = records.map((r) => (r.id === editRecord.id ? { ...r, ...data } : r))
-    setRecords(updated)
-    setEditRecord(null)
-    await persistWeightages(updated)
-  }
-
-  const handleDelete = async () => {
-    if (!deleteRecord) return
-    const updated = records.filter((r) => r.id !== deleteRecord.id)
-    setRecords(updated)
-    setDeleteRecord(null)
-    await persistWeightages(updated)
-  }
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen py-2">
-      <div className="max-w-full space-y-5 p-2">
-        {/* Page Header */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-h-screen p-4 space-y-6">
+      {/* ── Master Section (Green) ─────────────────────────────────────────── */}
+      <div className="rounded-lg border-2 border-green-400 bg-green-50 p-5">
+        <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Product Weightage Management</h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Manage product weightage configurations used in incentive calculations.
-            </p>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-700">Weight Name</Label>
+            <input
+              type="text"
+              placeholder="Text Box"
+              disabled={!!weightageId}
+              value={masterForm.weightName}
+              onChange={(e) => setMasterForm((f) => ({ ...f, weightName: e.target.value }))}
+              className="rounded border border-green-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 w-48 disabled:bg-green-100 disabled:cursor-not-allowed"
+            />
           </div>
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-700">Start Date</Label>
+            <input
+              type="date"
+              disabled={!!weightageId}
+              value={masterForm.startDate}
+              onChange={(e) => setMasterForm((f) => ({ ...f, startDate: e.target.value }))}
+              className="rounded border border-green-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 w-40 disabled:bg-green-100 disabled:cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-700">End Date</Label>
+            <input
+              type="date"
+              disabled={!!weightageId}
+              value={masterForm.endDate}
+              onChange={(e) => setMasterForm((f) => ({ ...f, endDate: e.target.value }))}
+              className="rounded border border-green-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 w-40 disabled:bg-green-100 disabled:cursor-not-allowed"
+            />
+          </div>
+          {!weightageId ? (
+            <Button variant="green" size="sm" onClick={handleCreateMaster} disabled={masterSaving}>
+              {masterSaving ? 'Creating…' : 'Create'}
+            </Button>
+          ) : (
+            <span className="text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-3 py-1.5">
+              ✓ Created (ID: {weightageId})
+            </span>
+          )}
+        </div>
+        {masterError && <p className="mt-2 text-xs text-red-600">{masterError}</p>}
+      </div>
+
+      {/* ── Details Section (Blue header / Orange rows) ────────────────────── */}
+      <div>
+        <div className="flex justify-end mb-2">
           <Button
-            variant="green"
+            variant="outline"
             size="sm"
             icon={<FiPlus className="h-4 w-4" />}
-            onClick={() => setShowForm(true)}
-            disabled={!selectedProgramId}
+            onClick={handleAddRow}
+            disabled={!weightageId || rowSaving}
           >
-            Add Weightage
+            {rowSaving ? 'Adding…' : 'Add New Row'}
           </Button>
         </div>
 
-        {/* Program Selector */}
-        {programs.length > 0 && (
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-semibold text-neutral-600 shrink-0">Program:</Label>
-            <select
-              className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-              value={selectedProgramId}
-              onChange={(e) => setSelectedProgramId(e.target.value)}
-            >
-              {programs.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => fetchWeightages(selectedProgramId)}
-              className="rounded p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 transition"
-              title="Refresh"
-            >
-              <FiRefreshCw className="h-4 w-4" />
-            </button>
-            {totalWeight > 0 && (
-              <Badge
-                className={`text-xs ${
-                  totalWeight === 100
-                    ? 'bg-green-100 text-green-700 border border-green-200'
-                    : 'bg-amber-100 text-amber-700 border border-amber-200'
-                }`}
-              >
-                Total: {totalWeight.toFixed(2)}%{totalWeight !== 100 && ' (must equal 100%)'}
-              </Badge>
-            )}
+        {rowError && (
+          <div className="mb-2 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-600">
+            {rowError}
           </div>
         )}
 
-        {/* Error */}
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-            {error}
-          </div>
-        )}
-
-        {/* Table */}
-        <Card className="rounded-xl border border-neutral-200 shadow-sm">
-          <CardHeader className="px-5 pb-2 pt-5">
-            <CardTitle className="text-base">Weightage Records</CardTitle>
-            <p className="mt-0.5 text-xs text-neutral-500">
-              {records.length} record{records.length !== 1 ? 's' : ''} total
-              {saving && ' · Saving…'}
-            </p>
-          </CardHeader>
-          <CardContent className="px-5 pb-5">
-            {loading ? (
-              <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
-                <p className="text-sm text-neutral-400">Loading weightages…</p>
-              </div>
-            ) : records.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
-                  <FiPlus className="h-6 w-6 text-neutral-400" />
-                </div>
-                <p className="text-sm font-medium text-neutral-500">No weightage records</p>
-                <p className="mt-1 text-xs text-neutral-400">
-                  {selectedProgramId
-                    ? 'Click "Add Weightage" to create your first record.'
-                    : 'Select a program first.'}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-neutral-200">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-200 bg-neutral-50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Product Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Product Code
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Weight (%)
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.map((record, idx) => (
-                      <tr
-                        key={record.id}
-                        className={`border-b border-neutral-100 transition hover:bg-neutral-50 ${
-                          idx === records.length - 1 ? 'border-b-0' : ''
-                        }`}
+        <div className="overflow-x-auto rounded-lg border border-neutral-300">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-blue-500 text-white">
+                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
+                  WeightageDetailsId
+                </th>
+                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
+                  Product Code
+                </th>
+                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
+                  Version
+                </th>
+                {DIMENSIONS.map((d) => (
+                  <th
+                    key={d}
+                    className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap"
+                  >
+                    Dimension {d}
+                  </th>
+                ))}
+                <th className="border border-blue-400 px-3 py-2 text-xs font-semibold whitespace-nowrap">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={14}
+                    className="px-4 py-8 text-center text-sm text-neutral-400"
+                  >
+                    {weightageId
+                      ? 'Click "Add New Row" to add detail entries.'
+                      : 'Create a Weightage Master first.'}
+                  </td>
+                </tr>
+              ) : (
+                detailRows.map((row, idx) => (
+                  <tr
+                    key={row.weightageDetailsId}
+                    className={idx % 2 === 0 ? 'bg-orange-50' : 'bg-orange-100'}
+                  >
+                    <td className="border border-orange-200 px-3 py-2 text-center font-mono text-xs">
+                      {row.weightageDetailsId}
+                    </td>
+                    <td className="border border-orange-200 px-2 py-1">
+                      <select
+                        className="w-full rounded border border-orange-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        value={row.productCode}
+                        onChange={(e) =>
+                          updateRowField(row.weightageDetailsId, 'productCode', e.target.value)
+                        }
                       >
-                        <td className="px-4 py-3 font-medium text-neutral-800">
-                          {record.productName}
+                        <option value="">Select…</option>
+                        {MOCK_PRODUCTS.map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="border border-orange-200 px-2 py-1">
+                      <select
+                        className="w-full rounded border border-orange-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-orange-50 disabled:cursor-not-allowed"
+                        value={row.version}
+                        disabled={!row.productCode}
+                        onChange={(e) =>
+                          updateRowField(row.weightageDetailsId, 'version', e.target.value)
+                        }
+                      >
+                        <option value="">Select…</option>
+                        {(MOCK_VERSIONS[row.productCode] ?? []).map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    {DIMENSIONS.map((d) => {
+                      const dim = row.dimensions[d]
+                      return (
+                        <td
+                          key={d}
+                          className={`border border-orange-200 px-2 py-1 text-center ${dim?.saved ? 'bg-green-100' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className={`text-xs font-semibold underline ${
+                              dim?.saved
+                                ? 'text-green-700 hover:text-green-900'
+                                : 'text-blue-600 hover:text-blue-800'
+                            }`}
+                            onClick={() =>
+                              setDimModal({
+                                rowId: row.weightageDetailsId,
+                                dimensionNo: d,
+                                weightageDetailsId: row.weightageDetailsId,
+                                productCode: row.productCode,
+                                version: row.version,
+                              })
+                            }
+                          >
+                            {dim?.saved ? '✓ Edit' : 'Click Here'}
+                          </button>
                         </td>
-                        <td className="px-4 py-3">
-                          <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono text-xs">
-                            {record.productCode}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-neutral-700 font-semibold">
-                          {record.weight}%
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              title="Edit"
-                              onClick={() => setEditRecord(record)}
-                              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 transition hover:bg-blue-50"
-                            >
-                              <FiEdit2 className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => setDeleteRecord(record)}
-                              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 transition hover:bg-red-50"
-                            >
-                              <FiTrash2 className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Delete</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      )
+                    })}
+                    <td className="border border-orange-200 px-2 py-1 text-center">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50 mx-auto"
+                        onClick={() => handleDeleteRow(row.weightageDetailsId)}
+                      >
+                        <FiTrash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Add Form Modal */}
-      {showForm && (
-        <WeightageForm
-          initial={null}
-          onSave={handleAdd}
-          onCancel={() => setShowForm(false)}
-          isEdit={false}
-        />
-      )}
-
-      {/* Edit Form Modal */}
-      {editRecord && (
-        <WeightageForm
-          initial={{
-            productName: editRecord.productName,
-            productCode: editRecord.productCode,
-            weight: editRecord.weight,
-          }}
-          onSave={handleEdit}
-          onCancel={() => setEditRecord(null)}
-          isEdit={true}
-        />
-      )}
-
-      {/* Delete Confirmation */}
-      {deleteRecord && (
-        <DeleteConfirm
-          name={deleteRecord.productName}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteRecord(null)}
+      {/* ── Dimension Modal ────────────────────────────────────────────────── */}
+      {dimModal && (
+        <DimensionModal
+          dimensionNo={dimModal.dimensionNo}
+          initial={
+            detailRows.find((r) => r.weightageDetailsId === dimModal.rowId)?.dimensions[
+              dimModal.dimensionNo
+            ] ?? null
+          }
+          saving={dimSaving}
+          onSave={handleDimSave}
+          onCancel={() => setDimModal(null)}
         />
       )}
     </div>

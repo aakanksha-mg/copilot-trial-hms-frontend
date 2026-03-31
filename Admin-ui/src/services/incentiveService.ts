@@ -15,6 +15,12 @@ import type {
   IUpdateProgramRequest,
   IProductWeightageResponse,
   ISaveProductWeightageRequest,
+  ICreateWeightageMasterRequest,
+  ICreateWeightageMasterResponse,
+  ICreateWeightageDetailsRequest,
+  ICreateWeightageDetailsResponse,
+  IDeleteWeightageDetailsRequest,
+  ISaveWeightageDimensionRequest,
 } from '@/models/incentive'
 
 export const incentiveService = {
@@ -188,6 +194,64 @@ export const incentiveService = {
       return response
     } catch (error) {
       console.error('incentiveService.saveProductWeightage error:', error)
+      throw error
+    }
+  },
+
+  // ─── Weightage Master / Details / Dimension ───────────────────────────────
+
+  /** POST — create Weightage Master entry, returns weightageId */
+  createWeightageMaster: async (data: ICreateWeightageMasterRequest) => {
+    try {
+      const response = await callApi<ICreateWeightageMasterResponse>(
+        APIRoutes.CREATE_WEIGHTAGE_MASTER,
+        [data],
+      )
+      return response
+    } catch (error) {
+      console.error('incentiveService.createWeightageMaster error:', error)
+      throw error
+    }
+  },
+
+  /** POST — add a new Weightage Details row, returns weightageDetailsId */
+  createWeightageDetails: async (data: ICreateWeightageDetailsRequest) => {
+    try {
+      const response = await callApi<ICreateWeightageDetailsResponse>(
+        APIRoutes.CREATE_WEIGHTAGE_DETAILS,
+        [data],
+      )
+      return response
+    } catch (error) {
+      console.error('incentiveService.createWeightageDetails error:', error)
+      throw error
+    }
+  },
+
+  /** DELETE — remove a Weightage Details row */
+  deleteWeightageDetails: async (data: IDeleteWeightageDetailsRequest) => {
+    try {
+      const response = await callApi<void>(
+        APIRoutes.DELETE_WEIGHTAGE_DETAILS,
+        [data],
+      )
+      return response
+    } catch (error) {
+      console.error('incentiveService.deleteWeightageDetails error:', error)
+      throw error
+    }
+  },
+
+  /** POST — save dimension data for a specific dimension column */
+  saveWeightageDimension: async (data: ISaveWeightageDimensionRequest) => {
+    try {
+      const response = await callApi<void>(
+        APIRoutes.SAVE_WEIGHTAGE_DIMENSION,
+        [data],
+      )
+      return response
+    } catch (error) {
+      console.error('incentiveService.saveWeightageDimension error:', error)
       throw error
     }
   },
