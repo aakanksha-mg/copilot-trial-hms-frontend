@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FiCheck, FiChevronRight, FiCode, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
+import { FiCheck, FiChevronRight, FiCode, FiFileText, FiFilter, FiInfo, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import SelectionExpressionBuilder from '@/components/SelectionExpressionBuilder'
 import { incentiveService } from '@/services/incentiveService'
 import type { IKpi, IIncentiveProgram } from '@/models/incentive'
@@ -63,6 +64,14 @@ const TIME_WINDOW_LABELS: Record<string, string> = {
   CUSTOM_RANGE: 'Custom Range',
   ROLLING_WINDOW: 'Rolling Window',
 }
+
+// ─── Weightage Options ────────────────────────────────────────────────────────
+
+const WEIGHTAGE_OPTIONS = ['Weightage A', 'Weightage B', 'Weightage C']
+
+// ─── Past Cycle Program Options ───────────────────────────────────────────────
+
+const PAST_CYCLE_PROGRAMS = ['Program 1', 'Program 2', 'Program 3']
 
 // ─── Agent Filter Mock Data ───────────────────────────────────────────────────
 
@@ -420,9 +429,11 @@ const AgentFilter = ({ filter, onChange, apiDesignations, designationsLoading }:
 
 interface PastQualifiedCyclesProps {
   cycles: PastCycle[]
+  selectedProgram: string
+  onProgramChange: (val: string) => void
 }
 
-const PastQualifiedCycles = ({ cycles }: PastQualifiedCyclesProps) => {
+const PastQualifiedCycles = ({ cycles, selectedProgram, onProgramChange }: PastQualifiedCyclesProps) => {
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -440,6 +451,21 @@ const PastQualifiedCycles = ({ cycles }: PastQualifiedCyclesProps) => {
         </p>
       </CardHeader>
       <CardContent className="px-5 pb-5">
+        {/* Program dropdown */}
+        <div className="mb-4">
+          <Label className="mb-1.5 block text-xs font-semibold text-neutral-600">Program</Label>
+          <Select value={selectedProgram} onValueChange={onProgramChange}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select program" />
+            </SelectTrigger>
+            <SelectContent>
+              {PAST_CYCLE_PROGRAMS.map((prog) => (
+                <SelectItem key={prog} value={prog}>{prog}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {cycles.length === 0 ? (
           <div className="rounded-lg border border-dashed border-neutral-300 p-6 text-center">
             <FiInfo className="mx-auto mb-2 h-5 w-5 text-neutral-400" />
@@ -587,8 +613,8 @@ const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove, kpiLibra
       </div>
 
       <div className="space-y-4 p-4">
-        {/* ── 1. Program Details ── */}
-        <Card className="rounded-lg border border-neutral-200">
+        {/* ── 1. Program Details — moved to top of page ── */}
+        {/* <Card className="rounded-lg border border-neutral-200">
           <CardHeader className="px-4 pb-2 pt-4">
             <CardTitle className="text-base">Program Details</CardTitle>
           </CardHeader>
@@ -639,7 +665,7 @@ const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove, kpiLibra
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
 
         {/* ── 2. Select KPIs for Calculation ── */}
         <Card className="rounded-lg border border-neutral-200">
@@ -753,7 +779,7 @@ const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove, kpiLibra
                 ) : (
                   <div className="space-y-4">
                     {slab.selectedKPIs.map((sel, idx) => {
-                      const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
+                      const kpi = kpiLibrary.find((k) => k.id === sel.kpiId)
                       if (!kpi) return null
                       return (
                         <div key={sel.kpiId} className="space-y-2">
@@ -839,7 +865,7 @@ const SlabSection = ({ slab, slabNumber, canRemove, onChange, onRemove, kpiLibra
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {slab.selectedKPIs.map((sel) => {
-                    const kpi = KPI_LIBRARY.find((k) => k.id === sel.kpiId)
+                    const kpi = kpiLibrary.find((k) => k.id === sel.kpiId)
                     if (!kpi) return null
                     const varName = toVarName(kpi.name)
                     return (
@@ -930,6 +956,8 @@ const IncentiveProgramConfig = () => {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [selectedWeightages, setSelectedWeightages] = useState<string[]>([])
+  const [pastCycleProgram, setPastCycleProgram] = useState<string>('')
 
   // Load KPI library from API
   useEffect(() => {
@@ -1083,7 +1111,99 @@ const IncentiveProgramConfig = () => {
           </div>
         )}
 
-        {/* 1. Agent Filter */}
+        {/* 1. Program Details */}
+        {activeSlab && (
+          <Card className="rounded-xl border border-neutral-200 shadow-sm">
+            <CardHeader className="px-5 pb-2 pt-5">
+              <div className="flex items-center gap-2">
+                <FiFileText className="h-4 w-4 text-teal-500" />
+                <CardTitle className="text-base">Program Details</CardTitle>
+              </div>
+              <p className="mt-0.5 text-xs text-neutral-500">
+                Configure the name, description, and duration for the active incentive program.
+              </p>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold text-neutral-600">Program Name *</Label>
+                  <Input
+                    label=""
+                    variant="outlined"
+                    className="mt-1"
+                    placeholder="e.g., Q1 2025 Sales Excellence Program"
+                    value={activeSlab.programName}
+                    onChange={(e) => updateSlab(activeSlab.id, { programName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-neutral-600">Description</Label>
+                  <textarea
+                    className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    rows={3}
+                    placeholder="Describe the objectives and scope of this incentive program…"
+                    value={activeSlab.programDescription}
+                    onChange={(e) => updateSlab(activeSlab.id, { programDescription: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs font-semibold text-neutral-600">Start Date *</Label>
+                    <Input
+                      label=""
+                      variant="outlined"
+                      type="date"
+                      className="mt-1"
+                      value={activeSlab.startDate}
+                      onChange={(e) => updateSlab(activeSlab.id, { startDate: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-neutral-600">End Date *</Label>
+                    <Input
+                      label=""
+                      variant="outlined"
+                      type="date"
+                      className="mt-1"
+                      value={activeSlab.endDate}
+                      onChange={(e) => updateSlab(activeSlab.id, { endDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 2. Weightage */}
+        <Card className="rounded-xl border border-neutral-200 shadow-sm">
+          <CardHeader className="px-5 pb-2 pt-5">
+            <CardTitle className="text-base">Weightage</CardTitle>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Select the applicable weightage options for this incentive program.
+            </p>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <div className="flex flex-wrap gap-4">
+              {WEIGHTAGE_OPTIONS.map((option) => (
+                <label key={option} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-neutral-50">
+                  <Checkbox
+                    checked={selectedWeightages.includes(option)}
+                    onCheckedChange={() => {
+                      setSelectedWeightages((prev) =>
+                        prev.includes(option) ? prev.filter((w) => w !== option) : [...prev, option]
+                      )
+                    }}
+                    className="shrink-0"
+                  />
+                  <span className="text-sm text-neutral-700">{option}</span>
+                </label>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. Agent Filter */}
         <AgentFilter
           filter={agentFilter}
           onChange={(updates) => setAgentFilter((prev) => ({ ...prev, ...updates }))}
@@ -1091,10 +1211,14 @@ const IncentiveProgramConfig = () => {
           designationsLoading={designationsLoading}
         />
 
-        {/* 2. Past Qualified Cycles */}
-        <PastQualifiedCycles cycles={pastCycles} />
+        {/* 4. Past Qualified Cycles */}
+        <PastQualifiedCycles
+          cycles={pastCycles}
+          selectedProgram={pastCycleProgram}
+          onProgramChange={setPastCycleProgram}
+        />
 
-        {/* 3. Slab Configuration — Left-Right Panel Layout */}
+        {/* 5. Slab Configuration — Left-Right Panel Layout */}
         <Card className="rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
           <CardHeader className="px-5 pb-2 pt-5 border-b border-neutral-200">
             <CardTitle className="text-base">Slab Configuration</CardTitle>
