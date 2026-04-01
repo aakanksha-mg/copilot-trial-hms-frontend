@@ -20,6 +20,15 @@ const MOCK_VERSIONS: Record<string, string> = {
   HONDA_CITY: '2016-2017',
 }
 
+// Add Product popup: demo product codes and version mapping
+const ADD_PRODUCT_CODES = ['P001', 'P002', 'P003']
+
+const ADD_PRODUCT_VERSIONS: Record<string, string> = {
+  P001: 'V1',
+  P002: 'V2',
+  P003: 'V3',
+}
+
 // Mock API: table name options
 const MOCK_TABLE_NAMES = ['Sales', 'Products', 'Customers', 'Orders', 'Inventory']
 
@@ -160,6 +169,125 @@ const DimensionModal = ({ dimensionNo, initial, onSave, onCancel }: DimensionMod
   )
 }
 
+// ─── Add Product Modal ────────────────────────────────────────────────────────
+
+interface AddProductForm {
+  productCode: string
+  version: string
+  weightage: string
+}
+
+interface AddProductModalProps {
+  onSave: (productCode: string, version: string, weightage: number) => void
+  onCancel: () => void
+}
+
+const AddProductModal = ({ onSave, onCancel }: AddProductModalProps) => {
+  const [form, setForm] = useState<AddProductForm>({
+    productCode: '',
+    version: '',
+    weightage: '',
+  })
+  const [error, setError] = useState<string | null>(null)
+
+  const handleProductChange = (code: string) => {
+    setForm({ productCode: code, version: ADD_PRODUCT_VERSIONS[code] ?? '', weightage: form.weightage })
+    setError(null)
+  }
+
+  const handleSave = () => {
+    if (!form.productCode) {
+      setError('Product Code is required.')
+      return
+    }
+    if (!form.version) {
+      setError('Version could not be determined.')
+      return
+    }
+    if (!form.weightage.trim()) {
+      setError('Weightage is required.')
+      return
+    }
+    const parsed = parseFloat(form.weightage)
+    if (isNaN(parsed)) {
+      setError('Weightage must be a valid number.')
+      return
+    }
+    if (parsed < 0 || parsed > 100) {
+      setError('Weightage must be between 0 and 100.')
+      return
+    }
+    onSave(form.productCode, form.version, parsed)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+          <h2 className="text-base font-semibold text-neutral-900">Add Product</h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-3 px-5 py-4">
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Product Code</Label>
+            <select
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.productCode}
+              onChange={(e) => handleProductChange(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {ADD_PRODUCT_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Version</Label>
+            <input
+              type="text"
+              readOnly
+              className="w-full rounded border border-neutral-300 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-600 cursor-not-allowed"
+              value={form.version}
+              placeholder="Auto-fetched on product selection"
+            />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs font-semibold text-neutral-600">Weightage</Label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Enter weightage"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={form.weightage}
+              onChange={(e) => { setForm((f) => ({ ...f, weightage: e.target.value })); setError(null) }}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="green" size="sm" onClick={handleSave}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const DIMENSIONS = Array.from({ length: 10 }, (_, i) => i + 1)
@@ -176,6 +304,9 @@ const ProductWeightage = () => {
 
   // Dimension modal
   const [dimModal, setDimModal] = useState<DimModalState | null>(null)
+
+  // Add Product modal
+  const [showAddProductModal, setShowAddProductModal] = useState(false)
 
   // ─── Create Master (mock) ────────────────────────────────────────────────
 
@@ -197,17 +328,22 @@ const ProductWeightage = () => {
 
   const handleAddRow = () => {
     if (!weightageId) return
+    setShowAddProductModal(true)
+  }
+
+  const handleAddProductSave = (productCode: string, version: string, weightage: number) => {
     rowCounterRef.current += 1
     setDetailRows((prev) => [
       ...prev,
       {
         weightageDetailsId: `WD-${rowCounterRef.current}`,
-        productCode: '',
-        version: '',
-        weightage: null,
+        productCode,
+        version,
+        weightage,
         dimensions: {},
       },
     ])
+    setShowAddProductModal(false)
   }
 
   // ─── Delete Detail Row (mock) ────────────────────────────────────────────
@@ -325,7 +461,7 @@ const ProductWeightage = () => {
             onClick={handleAddRow}
             disabled={!weightageId}
           >
-            Add New Row
+            Add Product
           </Button>
         </div>
 
@@ -363,7 +499,7 @@ const ProductWeightage = () => {
                     className="px-4 py-8 text-center text-sm text-neutral-400"
                   >
                     {weightageId
-                      ? 'Click "Add New Row" to add detail entries.'
+                      ? 'Click "Add Product" to add detail entries.'
                       : 'Create a Weightage Master first.'}
                   </td>
                 </tr>
@@ -485,6 +621,14 @@ const ProductWeightage = () => {
           }
           onSave={handleDimSave}
           onCancel={() => setDimModal(null)}
+        />
+      )}
+
+      {/* ── Add Product Modal ──────────────────────────────────────────────── */}
+      {showAddProductModal && (
+        <AddProductModal
+          onSave={handleAddProductSave}
+          onCancel={() => setShowAddProductModal(false)}
         />
       )}
     </div>
