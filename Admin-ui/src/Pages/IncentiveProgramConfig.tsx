@@ -913,6 +913,7 @@ const createSlab = (): SlabState => ({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const IncentiveProgramConfig = () => {
+  const [selectedWeights, setSelectedWeights] = useState<Record<string, number>>({})
   const [slabs, setSlabs] = useState<Array<SlabState>>(() => [createSlab()])
   const [activeSlabId, setActiveSlabId] = useState<string>(() => slabs[0]?.id ?? '')
   const [agentFilter, setAgentFilter] = useState<AgentFilterState>({
