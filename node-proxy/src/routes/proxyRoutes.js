@@ -126,7 +126,7 @@ router.post("/proxy", async (req, res) => {
 
     // Some clients treat non-2xx as transport failure. For login, prefer 200 and
     // let the app-level `responseHeader.errorCode` drive UX.
-    const statusToSend = fn === "login" ? 200 : status;
+    const statusToSend = ['login', 'generateOtp', 'verifyOtp'].includes(fn) ? 200 : status;
 
     if (encryptionEnabled) {
       const ciphertextResp = encryptionService.encryptObject(payload);

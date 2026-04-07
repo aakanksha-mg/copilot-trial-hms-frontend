@@ -49,10 +49,9 @@ export default function Login() {
 
   const handleMfaRequired = async (userId: number) => {
     setCurrentUserId(userId)
-    setCurrentStep('otp')
     setOtp('')
-    setCountdown(0)
     setMaskedEmail('')
+    await triggerOtpSend(userId)
   }
 
   const handleGenerateOtp = async () => {
