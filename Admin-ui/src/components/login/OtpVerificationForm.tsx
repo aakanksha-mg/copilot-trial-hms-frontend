@@ -11,27 +11,44 @@ interface OtpVerificationFormProps {
   setOtp: (val: string) => void
   onBack: () => void
   onVerify: () => void
-  onResend: () => void
+  onGenerate: () => void
+  emailMasked?: string
 }
 
 const OtpVerificationForm: React.FC<OtpVerificationFormProps> = ({
-   otp,
+  otp,
   countdown,
   setOtp,
   onBack,
   onVerify,
-  onResend,
+  onGenerate,
+  emailMasked,
 }) => {
+  const otpGenerated = Boolean(emailMasked) || countdown > 0
+
   return (
-     <Card className=" animate-slide-up">
-       <CardContent> <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-400 to-green-500 rounded-lg mb-4 shadow-lg">
-          <BiUserCheck className="w-8 h-8 text-white" />
+    <Card className=" animate-slide-up">
+      <CardContent>
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-400 to-green-500 rounded-lg mb-4 shadow-lg">
+            <BiUserCheck className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Enter Verification Code</h2>
+          {otpGenerated ? (
+            <>
+              <p className="text-gray-600 text-sm mb-1">
+                We've sent a 6-digit code to your email
+              </p>
+              {emailMasked && (
+                <p className="text-orange-600 font-medium text-sm">{emailMasked}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-600 text-sm mb-1">
+              Click Generate OTP to receive your verification code
+            </p>
+          )}
         </div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Enter Verification Code</h2>
-        <p className="text-gray-600 text-sm mb-1">We've sent a 6-digit code to your email</p>
-        {/* <p className="text-orange-600 font-medium text-sm">{email}</p> */}
-      </div>
 
       <div className="space-y-6">
         <div className="space-y-4">
@@ -42,17 +59,14 @@ const OtpVerificationForm: React.FC<OtpVerificationFormProps> = ({
         </div>
 
         <div className="text-center">
-          {countdown > 0 ? (
-            <p className="text-gray-500 text-sm">Resend code in {countdown} seconds</p>
-          ) : (
-            <button
-              type="button"
-              onClick={onResend}
-              className="text-blue-600 hover:text-blue-700 text-sm hover:underline transition-colors"
-            >
-              Didn't receive code? Resend
-            </button>
-          )}
+          <Button
+            variant='default'
+            onClick={onGenerate}
+            disabled={countdown > 0}
+            size='md'
+          >
+            {countdown > 0 ? `Generate OTP (${countdown}s)` : 'Generate OTP'}
+          </Button>
         </div>
 
         <div className="flex gap-3">
@@ -64,19 +78,21 @@ const OtpVerificationForm: React.FC<OtpVerificationFormProps> = ({
             <BsArrowLeft className="w-4 h-4" />
             Back
           </Button>
-          <Button
-           variant='green'
-           onClick={onVerify}
-            disabled={otp.length !== 6}
-            className='w-full'
-            size='lg'
-             >
-            <BiUserCheck className="w-5 h-5" />
-            Verify Code
-          </Button>
+          {otp.length > 0 && (
+            <Button
+             variant='green'
+             onClick={onVerify}
+              disabled={otp.length !== 6}
+              className='w-full'
+              size='lg'
+               >
+              <BiUserCheck className="w-5 h-5" />
+              Verify Code
+            </Button>
+          )}
         </div>
       </div>
-    </CardContent>
+      </CardContent>
     </Card>
   )
 }

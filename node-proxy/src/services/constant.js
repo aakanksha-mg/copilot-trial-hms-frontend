@@ -72,6 +72,8 @@ const APIRoutes = {
   INCENTIVE_KPI_LIBRARY: "/api/incentive/kpi-library",
   INCENTIVE_FILTERS: "/api/incentive/filters",
   INCENTIVE_PROGRAMS: "/api/incentive/programs",
+  GENERATE_OTP: "/api/auth/generate-otp",
+  VERIFY_OTP: "/api/auth/verify-otp"
 };
 
 module.exports = { APIRoutes };

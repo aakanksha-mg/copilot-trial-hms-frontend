@@ -1,10 +1,10 @@
 import { TOKEN_KEY } from './services/constant'
 import { authService } from './services/authService'
 import {
-  ApiResponse,
   ILoginRequest,
   ILoginResponseBody,
 } from '@/models/authentication'
+import type { ApiResponse } from '@/models/api'
 import { storage } from '@/utils/storage'
 import { authStore } from '@/store/authStore'
 
@@ -16,8 +16,7 @@ export const auth = {
     if (typeof window === 'undefined') return null // SSR guard
     if (_token) return _token
     _token = storage.get(TOKEN_KEY)
-    console.log(_token);
-    
+
     return _token
   },
 
@@ -47,13 +46,31 @@ export const auth = {
   async login(data: ILoginRequest): Promise<ApiResponse<ILoginResponseBody>> {
     const response = await authService.login(data)
     const loginResponse = response.responseBody.loginResponse
-    const token = JSON.stringify(loginResponse)
+    if (loginResponse?.mfaRequired) {
+      return response
+    }
     if (loginResponse?.token) {
-      _token = token
-      storage.set(TOKEN_KEY, token)
+      _token = loginResponse.token
+      storage.set(TOKEN_KEY, loginResponse.token)
       authStore.setState({
         token: loginResponse.token,
-        user: loginResponse,
+        user: loginResponse as any,
+      })
+    }
+    return response
+  },
+  async generateOtp(userId: number) {
+    return await authService.generateOtp(userId)
+  },
+  async verifyOtp(userId: number, submittedOtp: string): Promise<ApiResponse<ILoginResponseBody>> {
+    const response = await authService.verifyOtp(userId, submittedOtp)
+    const loginResponse = response.responseBody.loginResponse
+    if (loginResponse?.token) {
+      _token = loginResponse.token
+      storage.set(TOKEN_KEY, loginResponse.token)
+      authStore.setState({
+        token: loginResponse.token,
+        user: loginResponse as any,
       })
     }
     return response

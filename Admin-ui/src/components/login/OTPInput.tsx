@@ -1,5 +1,3 @@
-import * as React from "react"
-
 import {
   InputOTP,
   InputOTPGroup,
@@ -8,7 +6,7 @@ import {
 
 interface OTPInputtype{
     value:string,
-    onChange:()=>void
+  onChange:(value: string) => void
 }
 
 export default function OTPInput({value,onChange}:OTPInputtype) {
