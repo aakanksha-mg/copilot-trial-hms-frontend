@@ -644,6 +644,15 @@ const saveIncentiveProgramProductWeightage = async (data = {}, headers = {}) => 
   return apiClient.post(`${APIRoutes.INCENTIVE_PROGRAMS}/${id}/product-weightage`, body, { headers });
 };
 
+const verifyOtp = async (data = {}, headers = {}) => {
+  const { id, ...body } = data;
+  return apiClient.post(`${APIRoutes.VERIFY_OTP}`, body, { headers });
+};
+
+const generateOtp = async (data = {}, headers = {}) => {
+  const { id, ...body } = data;
+  return apiClient.post(`${APIRoutes.GENERATE_OTP}`, body, { headers });
+}
 module.exports = {
   login,
   search,
@@ -736,4 +745,6 @@ module.exports = {
   updateIncentiveProgram,
   getIncentiveProgramProductWeightage,
   saveIncentiveProgramProductWeightage,
+  verifyOtp,
+  generateOtp,
 };

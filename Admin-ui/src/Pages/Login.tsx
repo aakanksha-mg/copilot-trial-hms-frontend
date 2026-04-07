@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BiShield } from 'react-icons/bi'
 import { useNavigate } from '@tanstack/react-router'
 import { useAppForm } from '@/components/form'
@@ -7,6 +7,9 @@ import ForgotPasswordForm from '@/components/login/ForgotPasswordForm'
 import OtpVerificationForm from '@/components/login/OtpVerificationForm'
 import SuccessMessage from '@/components/login/SuccessMessage'
 import { UserNameSchema } from '@/schema/authSchema'
+import { auth } from '@/auth'
+import { showToast } from '@/components/ui/sonner'
+import { RoutePaths } from '@/utils/constant'
 
 type Step = 'login' | 'forgot-email' | 'otp' | 'success'
 
@@ -15,6 +18,49 @@ export default function Login() {
   const [currentStep, setCurrentStep] = useState<Step>('login')
   const [otp, setOtp] = useState<string>('')
   const [countdown, setCountdown] = useState<number>(0)
+  const [currentUserId, setCurrentUserId] = useState<number>(0)
+  const [maskedEmail, setMaskedEmail] = useState<string>('')
+
+  useEffect(() => {
+    if (countdown <= 0) return
+
+    const timerId = window.setInterval(() => {
+      setCountdown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+
+    return () => window.clearInterval(timerId)
+  }, [countdown])
+
+  const triggerOtpSend = async (userId: number) => {
+    try {
+      const response = await auth.generateOtp(userId)
+      if (response.responseHeader.errorCode === 0) {
+        const payload = response.responseBody?.generateOtpResponse
+        if (payload?.emailMasked) setMaskedEmail(payload.emailMasked)
+        setCurrentStep('otp')
+        setCountdown(payload?.expirySeconds || 60)
+      } else {
+        showToast('error', response.responseHeader.errorMessage || 'Failed to generate OTP')
+      }
+    } catch (err: any) {
+      showToast('error', err?.responseHeader?.errorMessage || 'Failed to generate OTP')
+    }
+  }
+
+  const handleMfaRequired = async (userId: number) => {
+    setCurrentUserId(userId)
+    setCurrentStep('otp')
+    setOtp('')
+    setCountdown(0)
+    setMaskedEmail('')
+  }
+
+  const handleGenerateOtp = async () => {
+    if (countdown > 0) return
+    if (currentUserId > 0) {
+      await triggerOtpSend(currentUserId)
+    }
+  }
 
   const forgetform = useAppForm({
     defaultValues: {
@@ -27,16 +73,6 @@ export default function Login() {
       if (!value.username) return
       setCurrentStep('otp')
       setCountdown(60)
-
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
     },
   })
 
@@ -46,9 +82,18 @@ export default function Login() {
   }
 
   /** Verify OTP */
-  const handleVerifyOTP = () => {
-    if (otp.length === 6) {
-      setCurrentStep('success')
+  const handleVerifyOTP = async () => {
+    if (otp.length === 6 && currentUserId > 0) {
+      try {
+        const response = await auth.verifyOtp(currentUserId, otp)
+        if (response.responseHeader.errorCode === 0) {
+          navigate({ to: RoutePaths.SEARCH })
+        } else {
+          showToast('error', response.responseHeader.errorMessage || 'Invalid OTP')
+        }
+      } catch (err: any) {
+        showToast('error', err?.responseHeader?.errorMessage || 'Invalid OTP')
+      }
     }
   }
 
@@ -57,6 +102,7 @@ export default function Login() {
     setCurrentStep('login')
     setOtp('')
     setCountdown(0)
+    setMaskedEmail('')
   }
 
   return (
@@ -86,6 +132,7 @@ export default function Login() {
           {currentStep === 'login' && (
             <LoginForm
             onForgotPassword={handleForgotPassword}
+            onMfaRequired={handleMfaRequired}
             />
           )}
           {currentStep === 'forgot-email' && (
@@ -99,9 +146,10 @@ export default function Login() {
               otp={otp}
               countdown={countdown}
               setOtp={setOtp}
-              onBack={() => setCurrentStep('forgot-email')}
+              onBack={handleBackToLogin}
               onVerify={handleVerifyOTP}
-              onResend={forgetform.handleSubmit}
+              onGenerate={handleGenerateOtp}
+              emailMasked={maskedEmail}
             />
           )}
           {currentStep === 'success' && (

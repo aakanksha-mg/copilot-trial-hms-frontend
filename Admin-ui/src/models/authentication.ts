@@ -12,11 +12,18 @@ export interface IHRMChunks{
 
 export interface ILoginResponseBody {
   loginResponse: {
-    token: string
-    expiration: string
-    userId: number
-    username: string
-    role: string | null
+  mfaRequired?: boolean
+  token?: string
+  expiration?: string
+  userId?: number
+  username?: string
+  role?: string | null
+} | null
+generateOtpResponse?: {
+  success: boolean
+  expiryTime: string
+  expirySeconds: number
+  emailMasked?: string
   } | null
   hmsDashboard: any
   agents: Array<IAgent>

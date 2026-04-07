@@ -79,6 +79,8 @@ export const APIRoutes = {
   CREATE_WEIGHTAGE_DETAILS: 'createWeightageDetails',
   DELETE_WEIGHTAGE_DETAILS: 'deleteWeightageDetails',
   SAVE_WEIGHTAGE_DIMENSION: 'saveWeightageDimension',
+  VERIFYOTP: 'verifyOtp',
+  GENERATEOTP: 'generateOtp'
 }
 
 export const LoginConstants = {

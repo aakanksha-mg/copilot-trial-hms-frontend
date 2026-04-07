@@ -9,7 +9,7 @@ import { CommonConstants, LoginConstants } from '@/services/constant'
 import { NOTIFICATION_CONSTANTS, RoutePaths } from '@/utils/constant'
 
 
-const LoginForm: any = ({ onForgotPassword }:any) => {
+const LoginForm: any = ({ onForgotPassword, onMfaRequired }:any) => {
   const navigate = useNavigate()
   const loginformConfig = {
     gridCols: 1,
@@ -77,7 +77,11 @@ const LoginForm: any = ({ onForgotPassword }:any) => {
       const { errorCode, errorMessage } = response.responseHeader
       switch (errorCode) {
         case CommonConstants.SUCCESS:
-          navigate({ to: RoutePaths.SEARCH })
+          if (response.responseBody?.loginResponse?.mfaRequired) {
+            onMfaRequired?.(response.responseBody.loginResponse.userId)
+          } else {
+            navigate({ to: RoutePaths.SEARCH })
+          }
           break
         case LoginConstants.INVALID_CREDENTIALS:
           showToast(
@@ -161,8 +165,6 @@ const LoginForm: any = ({ onForgotPassword }:any) => {
           config={loginformConfig}
           onSubmit={handleSubmit}
           onFieldClick={handleFieldClick}
-
-         
         />
       </CardContent>
     </Card>
