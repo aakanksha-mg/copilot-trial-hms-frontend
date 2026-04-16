@@ -13,6 +13,9 @@ interface OtpVerificationFormProps {
   onVerify: () => void
   onGenerate: () => void
   emailMasked?: string
+  hasGeneratedOtp: boolean // ✅ NEW
+  isGeneratingOtp: boolean
+  isVerifyingOtp: boolean
 }
 
 const OtpVerificationForm: React.FC<OtpVerificationFormProps> = ({
@@ -23,75 +26,118 @@ const OtpVerificationForm: React.FC<OtpVerificationFormProps> = ({
   onVerify,
   onGenerate,
   emailMasked,
+  hasGeneratedOtp,
+  isGeneratingOtp,
+  isVerifyingOtp
 }) => {
-  const otpGenerated = Boolean(emailMasked) || countdown > 0
+  const otpActive = countdown > 0
 
   return (
-    <Card className=" animate-slide-up">
+    <Card className="animate-slide-up">
       <CardContent>
+        {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-400 to-green-500 rounded-lg mb-4 shadow-lg">
             <BiUserCheck className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Enter Verification Code</h2>
-          {otpGenerated ? (
+
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Enter Verification Code
+          </h2>
+
+          {otpActive ? (
             <>
-              <p className="text-gray-600 text-sm mb-1">
+              <p className="text-gray-600 text-sm">
                 We've sent a 6-digit code to your email
               </p>
+
               {emailMasked && (
-                <p className="text-orange-600 font-medium text-sm">{emailMasked}</p>
+                <p className="text-orange-600 font-medium text-sm">
+                  {emailMasked}
+                </p>
               )}
+
+              <p className="text-sm text-gray-500 mt-1">
+                Expires in {countdown}s
+              </p>
             </>
           ) : (
-            <p className="text-gray-600 text-sm mb-1">
+            <p className="text-gray-600 text-sm">
               Click Generate OTP to receive your verification code
             </p>
           )}
         </div>
 
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <label className="block text-sm font-medium text-gray-700 text-center">
-            Verification Code
-          </label>
+        {/* Body */}
+        <div className="space-y-6">
           <OTPInput value={otp} onChange={setOtp} />
-        </div>
 
-        <div className="text-center">
-          <Button
-            variant='default'
-            onClick={onGenerate}
-            disabled={countdown > 0}
-            size='md'
-          >
-            {countdown > 0 ? `Generate OTP (${countdown}s)` : 'Generate OTP'}
-          </Button>
-        </div>
-
-        <div className="flex gap-3">
-          <Button
-           variant='default'
-            onClick={onBack}
-            size='lg'
+          {/* Generate Button */}
+          <div className="text-center">
+            {countdown > 0 ? (
+              <Button
+                variant="green"
+                onClick={onVerify}
+                disabled={otp.length !== 6 || isVerifyingOtp}
+                className="w-full"
               >
-            <BsArrowLeft className="w-4 h-4" />
-            Back
-          </Button>
-          {otp.length > 0 && (
-            <Button
-             variant='green'
-             onClick={onVerify}
-              disabled={otp.length !== 6}
-              className='w-full'
-              size='lg'
-               >
-              <BiUserCheck className="w-5 h-5" />
-              Verify Code
+                {isVerifyingOtp ? 'Verifying...' : (
+                  <>
+                    <BiUserCheck className="w-5 h-5" />
+                    Verify Code
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                onClick={onGenerate}
+                disabled={isGeneratingOtp}
+                className="w-full"
+              >
+                {isGeneratingOtp
+                  ? 'Sending...'
+                  : hasGeneratedOtp
+                    ? 'Resend OTP'
+                    : 'Generate OTP'}
+              </Button>
+            )}
+
+            {/* <Button
+              variant="default"
+              onClick={onGenerate}
+              disabled={countdown > 0}
+            >
+              {emailMasked ? 'Resend OTP' : 'Generate OTP'}
+            </Button> */}
+
+            {countdown > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                You can resend OTP in {countdown}s
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <Button variant="default" onClick={onBack}>
+              <BsArrowLeft className="w-4 h-4" />
+              Back
             </Button>
-          )}
+
+            {/* {otpActive && (
+              <Button
+                variant="green"
+                onClick={onVerify}
+                disabled={otp.length !== 6}
+                className="w-full"
+              >
+                <BiUserCheck className="w-5 h-5" />
+                Verify Code
+              </Button>
+            )} */}
+          </div>
         </div>
-      </div>
       </CardContent>
     </Card>
   )

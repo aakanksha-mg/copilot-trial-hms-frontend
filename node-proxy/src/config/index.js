@@ -14,6 +14,7 @@ module.exports = {
       "https://hrmadmin.netlify.app",
       "https://hms-alpha-eight.vercel.app",
       "http://localhost:3000",
+      "http://localhost:3001",
     ],
   },  // Example: 16-char IV
   // console.log("test")
