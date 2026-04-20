@@ -645,13 +645,11 @@ const saveIncentiveProgramProductWeightage = async (data = {}, headers = {}) => 
 };
 
 const verifyOtp = async (data = {}, headers = {}) => {
-  const { id, ...body } = data;
-  return apiClient.post(`${APIRoutes.VERIFY_OTP}`, body, { headers });
+  return apiClient.post(`${APIRoutes.VERIFY_OTP}`, data, { headers });
 };
 
 const generateOtp = async (data = {}, headers = {}) => {
-  const { id, ...body } = data;
-  return apiClient.post(`${APIRoutes.GENERATE_OTP}`, body, { headers });
+  return apiClient.post(`${APIRoutes.GENERATE_OTP}`, data, { headers });
 }
 module.exports = {
   login,
